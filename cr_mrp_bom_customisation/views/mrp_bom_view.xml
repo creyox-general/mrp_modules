@@ -1,0 +1,64 @@
+<!-- views/mrp_bom_view.xml -->
+<odoo>
+    <data>
+        <!-- Inherit the BOM form view to add is_evr field and conditionally hide project_id -->
+        <record id="mrp_bom_form_view_custom" model="ir.ui.view">
+            <field name="name">mrp.bom.form.custom</field>
+            <field name="model">mrp.bom</field>
+            <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
+            <field name="arch" type="xml">
+                <!-- Add is_evr field after product_tmpl_id -->
+                <field name="product_tmpl_id" position="after">
+                    <field name="product_default_code"/>
+                    <field name="project_customer_id"/>
+                    <field name="is_evr" readonly="1"/>
+                    <field name="cfe_project_location_id"/>
+                </field>
+
+                <xpath expr="//field[@name='product_qty']" position="replace">
+                    <field name="product_qty" invisible="is_evr"/>
+                </xpath>
+
+                <xpath expr="//label[@for='product_qty']" position="replace">
+                     <label for="product_qty" string="Quantity" invisible="is_evr"/>
+                </xpath>
+
+            </field>
+        </record>
+
+        <!-- Inherit BOM Line form view to add CFE quantity field -->
+        <record id="mrp_bom_line_form_view_custom" model="ir.ui.view">
+            <field name="name">mrp.bom.line.form.custom</field>
+            <field name="model">mrp.bom.line</field>
+            <field name="inherit_id" ref="mrp.mrp_bom_line_view_form"/>
+            <field name="arch" type="xml">
+                <!-- Add CFE quantity field after product_qty -->
+                <field name="product_qty" position="after">
+                    <field name="show_cfe_quantity" invisible="1"/>
+                    <field name="cfe_quantity"
+                           string="CFE Quantity"
+                           placeholder="Customer supplied quantity"
+                           invisible="[('show_cfe_quantity', '=', False)]"/>
+                    <field name="lli" invisible="1"/>
+                    <field name="approval_1" invisible="1"/>
+                    <field name="approval_2" invisible="1"/>
+                    <field name="show_lli" invisible="1"/>
+                    <field name="show_approval_1" invisible="1"/>
+                    <field name="show_approval_2" invisible="1"/>
+                    <field name="mo_internal_ref" invisible="1"/>
+                    <field name="show_mo_internal_ref" invisible="1"/>
+                    <field name="po_created"/>
+                    <field name="customer_po_created"/>
+                    <field name="vendor_po_created"/>
+                    <field name="product_manufacturer_id"/>
+                    <field name="can_edit_approval_2"/>
+                    <field name="product_default_code"/>
+                    <field name="product_old_everest_pn"/>
+                    <field name="po_line_id"/>
+                    <field name="customer_po_line_id"/>
+                </field>
+            </field>
+        </record>
+
+    </data>
+</odoo>

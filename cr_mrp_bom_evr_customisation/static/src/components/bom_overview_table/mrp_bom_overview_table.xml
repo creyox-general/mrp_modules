@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+<t t-inherit="mrp.BomOverviewTable"
+   t-inherit-mode="extension"
+   t-name="cr_mrp_bom_evr_customisation.BomOverviewAddBranchColumn">
+
+   <xpath expr="//th[@name='th_mrp_bom_h']" position="after">
+            <th t-if="data.is_evr and showApproveToManufacture" class="text-center">Approve to Manufacture</th>
+   </xpath>
+
+    <xpath expr="//th[contains(@class, 'cfe')]" position="after">
+        <th t-if="data.is_evr" class="text-center" title="Branch">Branch</th>
+    </xpath>
+
+    <xpath expr="//th[@t-if='showAvailabilities'][1]" position="before">
+
+                        <th t-if="data.is_evr and showCustomerRef" class="text-center">Customer Ref</th>
+                    <th t-if="data.is_evr and showPoLineId" class="text-center">Related PO Line</th>
+
+
+
+            <t t-if="data.is_evr and showPurchaseGroup">
+                <th class="text-center">To Order</th>
+                <th class="text-center">To Order CFE</th>
+                <th class="text-center">Ordered</th>
+                <th class="text-center">Ordered CFE</th>
+                <th class="text-center">To Transfer</th>
+                <th class="text-center">To Transfer CFE</th>
+                <th class="text-center">Transferred</th>
+                <th class="text-center">Transferred CFE</th>
+                <th name='th_used' class="text-center">Used</th>
+            </t>
+
+            <th t-if="data.is_evr and showFreeToUse" class="text-center">Free to Use</th>
+
+        </xpath>
+
+
+        <!-- Replace existing cost headers with Display Cost option -->
+        <xpath expr="//th[@t-if='showCosts'][1]" position="replace">
+            <th t-if="showDisplayCost" class="text-end" title="This is the cost based on the BoM of the product. It is computed by summing the costs of the components and operations needed to build the product.">BoM Cost</th>
+        </xpath>
+
+        <xpath expr="//th[@t-if='showCosts'][1]" position="replace">
+            <th t-if="showDisplayCost" class="text-end" title="This is the cost defined on the product.">Product Cost</th>
+        </xpath>
+
+        <!-- Update tfoot for Display Cost -->
+        <xpath expr="//tfoot[@t-if='showCosts']" position="attributes">
+            <attribute name="t-if">showDisplayCost</attribute>
+        </xpath>
+
+</t>
+</templates>
+

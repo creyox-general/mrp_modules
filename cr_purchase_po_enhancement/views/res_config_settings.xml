@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="purchase_changes_setting" model="ir.ui.view">
+        <field name="name">res.config.settings.inherit</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="purchase.res_config_settings_view_form_purchase"/>
+        <field name="arch" type="xml">
+            <xpath expr="//app[@name='purchase']/*[last()]" position="after">
+                <block title="RFQ Display Date Setting" id="backdate_setting_container">
+                    <setting id="purchase_date_setting">
+                        <div class="content-group mt16 d-flex align-items-center gap-2">
+                            <label for="display_date_days">Display Date Day</label>
+                            <field name="display_date_days"/>
+                        </div>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

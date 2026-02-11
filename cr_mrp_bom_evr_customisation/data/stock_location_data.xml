@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="stock_location_goal" model="stock.location">
+        <field name="name">GOAL Location</field>
+        <field name="location_id" ref="stock.stock_location_stock"/> <!-- WH/Stock -->
+        <field name="usage">internal</field>
+    </record>
+</odoo>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_product_template_form_inherit_manufacture_purchase" model="ir.ui.view">
+        <field name="name">product.template.form.inherit.manufacture.purchase</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='inventory']//group[@name='group_lots_and_weight']" position="before">
+                <group name="group_manufacture_purchase" string="Manufacturing Options"
+                       invisible="not show_manufacture_purchase">
+                    <field name="show_manufacture_purchase" invisible="1"/>
+                    <field name="manufacture_purchase"
+                           required="show_manufacture_purchase"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

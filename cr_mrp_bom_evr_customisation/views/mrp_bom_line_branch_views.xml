@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Tree -->
+    <record id="view_mrp_bom_line_branch_tree" model="ir.ui.view">
+        <field name="name">mrp.bom.line.branch.tree</field>
+        <field name="model">mrp.bom.line.branch</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="bom_id"/>
+                <field name="bom_line_id"/>
+                <field name="branch_name"/>
+                <field name="location_id"/>
+                <field name="path_uid"/>
+                <field name="sequence"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form -->
+    <record id="view_mrp_bom_line_branch_form" model="ir.ui.view">
+        <field name="name">mrp.bom.line.branch.form</field>
+        <field name="model">mrp.bom.line.branch</field>
+        <field name="arch" type="xml">
+            <form string="BOM Branch">
+                <header>
+                <button name="action_view_branch_components"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-cubes">
+                    <field name="mrp_bom_line_branch_component_ids"
+                           widget="statinfo"
+                           string="Components"/>
+                </button>
+            </header>
+
+                <sheet>
+                    <group>
+                        <field name="bom_id"/>
+                        <field name="bom_line_id"/>
+                        <field name="branch_name"/>
+                        <field name="location_id" readonly="1"/>
+                        <field name="path_uid"/>
+                        <field name="sequence"/>
+                        <field name="free_to_use"/>
+                        <field name="mrp_bom_line_branch_component_ids" widget="one2many"/>
+                        <field name="transferred"/>
+                        <field name="used"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_mrp_bom_line_branch_search" model="ir.ui.view">
+    <field name="name">mrp.bom.line.branch.search</field>
+    <field name="model">mrp.bom.line.branch</field>
+    <field name="arch" type="xml">
+        <search string="Search BOM Branches">
+            <!-- Searchable Fields -->
+            <field name="bom_id"/>
+            <field name="bom_line_id"/>
+            <field name="branch_name"/>
+            <field name="location_id"/>
+            <field name="path_uid"/>
+
+            <!-- Filters -->
+            <filter name="group_by_bom"
+                    string="Group by BOM"
+                    context="{'group_by': 'bom_id'}"/>
+
+            <filter name="group_by_bom_line"
+                    string="Group by BOM Line"
+                    context="{'group_by': 'bom_line_id'}"/>
+
+            <filter name="group_by_branch_name"
+                    string="Group by Branch Name"
+                    context="{'group_by': 'branch_name'}"/>
+
+            <filter name="group_by_location"
+                    string="Group by Location"
+                    context="{'group_by': 'location_id'}"/>
+        </search>
+    </field>
+</record>
+
+
+    <!-- Action -->
+    <record id="action_mrp_bom_line_branch" model="ir.actions.act_window">
+        <field name="name">BOM Branch Mapping</field>
+        <field name="res_model">mrp.bom.line.branch</field>
+        <field name="view_mode">search,list,form</field>
+        <field name="context">{'search_default_group_by_bom': 1}</field>
+    </record>
+
+    <menuitem id="menu_mrp_bom_line_branch"
+              name="BOM Branch Mapping"
+              parent="mrp.menu_mrp_configuration"
+              action="action_mrp_bom_line_branch"/>
+</odoo>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="mrp.BomOverviewControlPanel" t-inherit="mrp.BomOverviewControlPanel" t-inherit-mode="extension">
+        <!-- Wrap the quantity section with conditional rendering -->
+        <xpath expr="//form" position="replace">
+            <form class="d-flex flex-grow-1 gap-3 flex-column flex-md-row">
+                <!-- Only show quantity input if is_evr is false -->
+                <t t-if="!props.isEvr">
+                    <label class="visually-hidden" for="bom_quantity">Quantity</label>
+                    <div t-attf-class="input-group align-items-center">
+                        <div class="col-4 col-md-auto pe-2 fw-bold">Quantity</div>
+                        <input id="bom_quantity" type="number" step="any" t-on-change="ev => this.updateQuantity(ev)" t-on-keypress="ev => this.onKeyPress(ev)" t-att-value="props.bomQuantity" min="1" class="o_input form-control rounded-0"/>
+                        <div t-if="props.showOptions.uom" t-out="props.uomName" class="d-flex align-items-center text-muted small lh-sm">Quantity</div>
+                    </div>
+                </t>
+                <!-- Variant selector (keep as is) -->
+                <t t-if="props.showVariants">
+                    <div class="input-group align-items-center">
+                        <div class="col-4 col-md-auto pe-2 fw-bold">Variant</div>
+                        <div class="col">
+                            <Many2XAutocomplete
+                                value="props.data.name"
+                                getDomain.bind="getDomain"
+                                resModel="'product.product'"
+                                fieldString="props.data.name"
+                                activeActions="{}"
+                                update.bind="(ev) => this.props.changeVariant(ev[0]?.id)"
+                            />
+                        </div>
+                    </div>
+                </t>
+            </form>
+        </xpath>
+    </t>
+
+</templates>

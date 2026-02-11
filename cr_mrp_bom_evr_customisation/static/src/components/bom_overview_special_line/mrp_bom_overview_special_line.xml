@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<templates xml:space="preserve">
+    <t t-inherit="mrp.BomOverviewSpecialLine" t-inherit-mode="extension" t-name="cr_mrp_bom_evr.BomOverviewSpecialLineCustom">
+        <xpath expr="//td[@name='bom_cost']" position="before">
+            <!-- Approve to Manufacture -->
+            <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+
+            <!-- Purchase Group placeholders -->
+            <t t-if="data.is_evr">
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+                <td class="text-center"><span class="text-muted">-</span></td>
+            </t>
+
+            <!-- Availability placeholder -->
+            <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+
+            <!-- Customer Ref placeholder -->
+            <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+
+            <!-- Related PO Line placeholder -->
+            <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+
+            <!-- Free to Use placeholder -->
+            <td class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+        </xpath>
+    </t>
+</templates>

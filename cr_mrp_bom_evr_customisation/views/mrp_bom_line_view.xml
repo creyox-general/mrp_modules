@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+<!--    &lt;!&ndash; Add Branch column in BOM Line TREE view &ndash;&gt;-->
+<!--    <record id="view_mrp_bom_line_tree_inherit_branch" model="ir.ui.view">-->
+<!--        <field name="name">mrp.bom.line.tree.inherit.branch</field>-->
+<!--        <field name="model">mrp.bom.line</field>-->
+<!--        <field name="inherit_id" ref="mrp.mrp_bom_line_view_tree"/>-->
+<!--        <field name="arch" type="xml">-->
+
+<!--            &lt;!&ndash; Insert branch after product_id column &ndash;&gt;-->
+<!--            <xpath expr="//field[@name='product_id']" position="after">-->
+<!--                <field name="branch"/>-->
+<!--            </xpath>-->
+
+<!--        </field>-->
+<!--    </record>-->
+
+    <!-- Add Branch field in BOM Line FORM view -->
+    <record id="view_mrp_bom_line_form_inherit_branch" model="ir.ui.view">
+        <field name="name">mrp.bom.line.form.inherit.branch</field>
+        <field name="model">mrp.bom.line</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_line_view_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Add branch after product_id -->
+            <xpath expr="//form//field[@name='product_id']" position="after">
+                <field name="approve_to_manufacture"/>
+                <field name="customer_ref"/>
+
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

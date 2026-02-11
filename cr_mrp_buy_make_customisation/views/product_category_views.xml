@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_category_form_inherit_mech" model="ir.ui.view">
+        <field name="name">product.category.form.inherit.mech</field>
+        <field name="model">product.category</field>
+        <field name="inherit_id" ref="product.product_category_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='removal_strategy_id']" position="after">
+                <field name="mech"/>
+                <field name="demo_bom_id"
+                       options="{'no_create': True, 'no_open': True}"
+                       domain="[('type', '=', 'normal')]"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

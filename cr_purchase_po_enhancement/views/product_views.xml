@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="product_normal_form_view_inherit_special_po" model="ir.ui.view">
+        <field name="name">product.product.form.special.po</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_normal_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_update_quantity_on_hand'][1]" position="after">
+                <button name="action_create_special_po_product"
+                        type="object"
+                        string="Create a special PO"
+                        class="oe_stat_button"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

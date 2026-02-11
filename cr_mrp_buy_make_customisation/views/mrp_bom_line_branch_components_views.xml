@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Components Form View -->
+    <record id="view_mrp_bom_line_branch_components_form_critical_lost" model="ir.ui.view">
+        <field name="name">mrp.bom.line.branch.components.form.critical.lost</field>
+        <field name="model">mrp.bom.line.branch.components</field>
+        <field name="inherit_id" ref="cr_mrp_bom_evr_customisation.view_mrp_bom_line_branch_components_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='used']" position="after">
+                <field name="lost"/>
+                <field name="critical" widget="boolean_toggle"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

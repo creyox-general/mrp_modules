@@ -1,0 +1,18 @@
+<odoo>
+    <record id="view_picking_form_inherit_root_bom" model="ir.ui.view">
+        <field name="name">stock.picking.form.inherit.root.bom</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='picking_type_id']" position="after">
+                <field name="root_bom_id"/>
+            </xpath>
+
+            <xpath expr="//field[@name='product_uom_qty']" position="after">
+                <field name="mrp_bom_line_id"/>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>

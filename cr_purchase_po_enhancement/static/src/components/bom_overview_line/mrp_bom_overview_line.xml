@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="cr_purchase_po_enhancement.SpecialPODialog">
+        <Dialog title="'Create Special PO'" size="'md'">
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Choose an option:</label>
+                    <div class="form-check">
+                        <input
+                            class="form-check-input"
+                            type="radio"
+                            name="actionType"
+                            id="newRequest"
+                            value="new_request"
+                            t-att-checked="state.actionType === 'new_request' ? 'checked' : undefined"
+                            t-on-change="onActionTypeChange"
+                        />
+                        <label class="form-check-label" for="newRequest">
+                            Create a new request
+                        </label>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input
+                            class="form-check-input"
+                            type="radio"
+                            name="actionType"
+                            id="newRequestQty"
+                            value="new_request_qty"
+                            t-att-checked="state.actionType === 'new_request_qty' ? 'checked' : undefined"
+                            t-on-change="onActionTypeChange"
+                        />
+                        <label class="form-check-label" for="newRequestQty">
+                            Create a new request with change in qty
+                        </label>
+                    </div>
+                </div>
+
+                <t t-if="state.actionType === 'new_request_qty'">
+                    <div class="mb-3">
+                        <label for="quantity" class="form-label">Quantity:</label>
+                        <input
+                            type="number"
+                            class="form-control"
+                            id="quantity"
+                            t-att-value="state.quantity"
+                            t-on-input="onQuantityChange"
+                            min="0"
+                            step="1"
+                        />
+                    </div>
+                </t>
+            </div>
+
+            <t t-set-slot="footer">
+                <button class="btn btn-primary" t-on-click="onConfirm">
+                    Create Approval Request
+                </button>
+                <button class="btn btn-secondary" t-on-click="props.close">
+                    Cancel
+                </button>
+            </t>
+        </Dialog>
+    </t>
+
+    <t t-inherit="mrp.BomOverviewLine" t-inherit-mode="extension">
+        <xpath expr="//td[@name='td_mrp_bom']" position="after">
+            <td t-if="data.is_evr" class="text-center">
+                <t t-if="data.cfe_editable">
+                     <button type="button"
+                        class="btn btn-sm btn-secondary"
+                        t-on-click="() => this.onCreateSpecialPO(data.bom_line_id)">
+                    Create Special PO
+                </button>
+                </t>
+                <t t-else="">
+                    <span class="text-muted"></span>
+                </t>
+
+            </td>
+        </xpath>
+    </t>
+
+</templates>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ========================================================= -->
+    <!-- Tree View                                                 -->
+    <!-- ========================================================= -->
+    <record id="view_mrp_bom_line_branch_components_tree" model="ir.ui.view">
+        <field name="name">mrp.bom.line.branch.components.tree</field>
+        <field name="model">mrp.bom.line.branch.components</field>
+        <field name="arch" type="xml">
+            <list string="Branch Components">
+                <field name="bom_line_branch_id"/>
+                <field name="root_bom_id"/>
+                <field name="bom_id"/>
+                <field name="cr_bom_line_id"/>
+                <field name="location_id"/>
+                <field name="is_direct_component"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ========================================================= -->
+    <!-- Form View                                                 -->
+    <!-- ========================================================= -->
+    <record id="view_mrp_bom_line_branch_components_form" model="ir.ui.view">
+        <field name="name">mrp.bom.line.branch.components.form</field>
+        <field name="model">mrp.bom.line.branch.components</field>
+        <field name="arch" type="xml">
+            <form string="Branch Component">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="bom_line_branch_id"/>
+                            <field name="root_bom_id"/>
+                            <field name="bom_id"/>
+                            <field name="cr_bom_line_id"/>
+                            <field name="location_id"/>
+                            <field name="is_direct_component"/>
+                            <field name="customer_po_ids"/>
+                            <field name="vendor_po_ids"/>
+                        </group>
+
+                        <group string="Quantities">
+                            <field name="to_order"/>
+                            <field name="to_order_cfe"/>
+                            <field name="ordered"/>
+                            <field name="ordered_cfe"/>
+                            <field name="to_transfer"/>
+                            <field name="to_transfer_cfe"/>
+                            <field name="transferred"/>
+                            <field name="transferred_cfe"/>
+                            <field name="used"/>
+                            <field name="free_to_use"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_mrp_bom_line_branch_components_search" model="ir.ui.view">
+    <field name="name">mrp.bom.line.branch.components.search</field>
+    <field name="model">mrp.bom.line.branch.components</field>
+    <field name="arch" type="xml">
+        <search>
+            <field name="root_bom_id"/>
+
+            <filter name="group_by_root_bom_id"
+                    string="Root BOM"
+                    context="{'group_by': 'root_bom_id'}"/>
+        </search>
+    </field>
+</record>
+
+
+    <!-- ========================================================= -->
+    <!-- Action Window                                             -->
+    <!-- ========================================================= -->
+    <record id="action_mrp_bom_line_branch_components" model="ir.actions.act_window">
+        <field name="name">BOM Branch Components</field>
+        <field name="res_model">mrp.bom.line.branch.components</field>
+        <field name="view_mode">search,list,form</field>
+        <field name="context">{'search_default_group_by_root_bom_id': 1}</field>
+    </record>
+
+    <!-- ========================================================= -->
+    <!-- Menu Item (Optional)                                      -->
+    <!-- ========================================================= -->
+    <!-- Add under Manufacturing > Configuration -->
+    <menuitem id="menu_mrp_bom_line_branch_components"
+              name="BOM Branch Components"
+              parent="mrp.menu_mrp_configuration"
+              action="action_mrp_bom_line_branch_components"
+              sequence="50"/>
+
+</odoo>

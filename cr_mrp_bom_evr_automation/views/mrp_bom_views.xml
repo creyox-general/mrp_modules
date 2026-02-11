@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_mrp_bom_form_inherit_purchase_flow" model="ir.ui.view">
+        <field name="name">mrp.bom.form.purchase.flow</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@class='oe_button_box']" position="inside">
+                <button name="action_run_purchase_flow_now"
+                        type="object"
+                        string="Run Purchase Flow"
+                        invisible="not is_evr"
+                        class="oe_highlight"/>
+            </xpath>
+
+            <xpath expr="//field[@name='project_id']" position="after">
+                <field name="last_flow_run" readonly="1" invisible="not is_evr"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

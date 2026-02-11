@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<templates xml:space="preserve">
+    <t t-inherit="mrp.BomOverviewSpecialLine" t-inherit-mode="extension" t-name="BomOverviewSpecialLine">
+        <!-- Add CFE quantity cell at column 2 position -->
+        <xpath expr="//td[@name='td_mrp_bom']" position="before">
+            <td class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+        </xpath>
+       <xpath expr="//td[@name='td_mrp_bom']" position="after">
+            <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+        </xpath>
+
+        <xpath expr="//td[@name='bom_cost']" position="before">
+             <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+
+            <!-- Approval 1 -->
+            <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+
+            <!-- Approval 2 -->
+            <td t-if="data.is_evr" class="text-center">
+                <span class="text-muted">-</span>
+            </td>
+        </xpath>
+
+
+
+    </t>
+</templates>

@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="mrp.BomOverviewLine"
+       t-inherit-mode="extension"
+       t-name="cr_mrp_bom_customisation.BomOverviewLineBranch">
+
+<!--        <xpath expr="//a[@t-on-click.prevent='() => this.goToAction(data.link_id, data.link_model)']" position="attributes">-->
+<!--            <attribute name="t-attf-class">{{ !data.has_main_vendor ? 'text-danger' : '' }}</attribute>-->
+<!--        </xpath>-->
+
+
+                <xpath expr="//td[@name='td_mrp_bom']" position="after">
+                         <td t-if="data.is_evr and props.showOptions.approveToManufacture" class="text-center">
+                            <input t-if="data.approve_to_manufacture_editable"
+                                   type="checkbox"
+                                   class="form-check-input"
+                                   t-model="data.approve_to_manufacture"
+                                   t-att-data-bom-line-id="data.bom_line_id"
+                                   t-on-change="onApproveToManufactureChange"/>
+                            <span t-elif="data.approve_to_manufacture"
+                                  class="badge badge-success bg-success text-white">✓</span>
+                            <span t-else="" class="text-muted"></span>
+                        </td>
+                </xpath>
+
+        <xpath expr="//td[contains(@t-if, 'props.showOptions.cfeQuantity')]" position="after">
+            <td t-if="data.is_evr" class="text-center">
+                <t t-if="data.branch">
+                    <span t-esc="data.branch"/>
+                </t>
+                <t t-else="">
+                    <span class="text-muted"></span>
+                </t>
+            </td>
+        </xpath>
+
+        <xpath expr="//td[contains(@t-if, 'props.showOptions.approval2')]" position="after">
+
+           <td t-if="data.is_evr and props.showOptions.customerRef" class="text-center">
+                <input t-if="data.customer_ref_editable"
+                       type="text"
+                       class="form-control form-control-sm"
+                       t-att-data-bom-line-id="data.bom_line_id"
+                       t-model="data.customer_ref"
+                       placeholder="Customer Ref"
+                       style="width: 120px; margin: 0 auto;"
+                       t-on-blur="onCustomerRefChange"/>
+                <span t-elif="data.customer_ref" t-esc="data.customer_ref"/>
+                <span t-else="" class="text-muted"></span>
+            </td>
+
+<!--            <td t-if="data.is_evr and props.showOptions.poLineId" class="text-center">-->
+<!--                <span t-if="data.po_line_name" t-esc="data.po_line_name"/>-->
+<!--                <span t-else="" class="text-muted"></span>-->
+<!--            </td>-->
+
+            <td t-if="data.is_evr and props.showOptions.poLineId" class="text-center">
+                <t t-if="data.po_data and data.po_data.length > 0">
+                    <t t-foreach="data.po_data" t-as="po" t-key="po.id">
+                        <span class="text-primary"
+                              t-on-click="(ev) => this.onPoClick(po.id)"
+                              style="cursor: pointer; text-decoration: none;"
+                              t-esc="po.name"/>
+                        <t t-if="!po_last">, </t>
+                    </t>
+                </t>
+                <span t-else="" class="text-muted"></span>
+            </td>
+
+            <t t-if="data.is_evr and props.showOptions.purchaseGroup">
+                <td class="text-center">
+                    <t t-if="data.purchase_group_editable">
+                        <span t-esc="data.to_order"/>
+                    </t>
+                    <t t-else="">
+
+                    </t>
+                </td>
+                <td class="text-center">
+                    <t t-if="data.purchase_group_editable">
+                       <span t-esc="data.to_order_cfe"/>
+                    </t>
+                    <t t-else="">
+
+                    </t>
+
+                </td>
+                <td class="text-center">
+                      <t t-if="data.purchase_group_editable">
+                       <span t-esc="data.ordered"/>
+                    </t>
+                    <t t-else="">
+
+                    </t>
+                </td>
+                <td class="text-center">
+                    <t t-if="data.purchase_group_editable">
+                       <span t-esc="data.ordered_cfe"/>
+                    </t>
+                    <t t-else="">
+
+                    </t>
+                </td>
+                <td class="text-center">
+                    <t t-if="data.purchase_group_editable">
+                       <span t-esc="data.to_transfer"/>
+                    </t>
+                    <t t-else="">
+
+                    </t>
+
+                </td>
+                <td class="text-center">
+                     <t t-if="data.purchase_group_editable">
+                       <span t-esc="data.to_transfer_cfe"/>
+                    </t>
+                    <t t-else="">
+
+                    </t>
+                </td>
+                <td class="text-center">
+                      <t t-if="data.purchase_group_editable">
+                    <span t-esc="data.transferred"/>
+                    </t>
+                     <t t-elif="data.transferred_editable">
+                         <span t-esc="data.transferred"/>
+                     </t>
+                    <t t-else="">
+
+                    </t>
+                </td>
+                <td class="text-center">
+                    <t t-if="data.purchase_group_editable">
+                    <span t-esc="data.transferred_cfe"/>
+                    </t>
+                    <t t-else="">
+
+                    </t>
+                </td>
+                <td class="text-center" name="td_used">
+                     <t t-if="data.purchase_group_editable">
+                    <span t-esc="data.used"/>
+                    </t>
+                    <t t-elif="data.used_editable">
+                         <span t-esc="data.used"/>
+                     </t>
+                    <t t-else="">
+
+                    </t>
+                </td>
+            </t>
+
+              <td t-if="data.is_evr and props.showOptions.freeToUse" class="text-center">
+                  <t t-if="data.display_free_to_use">
+                       <span t-esc="data.free_to_use"/>
+                  </t>
+                  <t t-else=""/>
+
+            </td>
+
+
+        </xpath>
+
+
+                <!-- Display Cost Fields - Replace existing cost columns -->
+        <xpath expr="//td[@t-if='showCosts'][1]" position="replace">
+            <td t-if="props.showOptions.displayCost" t-attf-class="text-end {{ data.type == 'component' ? 'opacity-50' : '' }}" t-esc="formatMonetary(data.bom_cost)"/>
+        </xpath>
+
+        <xpath expr="//td[@t-if='showCosts'][1]" position="replace">
+            <td t-if="props.showOptions.displayCost" class="text-end">
+                <span t-if="data.hasOwnProperty('prod_cost')" t-esc="formatMonetary(data.prod_cost)"/>
+            </td>
+        </xpath>
+
+    </t>
+</templates>

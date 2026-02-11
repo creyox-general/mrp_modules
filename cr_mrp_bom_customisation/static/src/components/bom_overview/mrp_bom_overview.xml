@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="mrp.BomOverviewComponent" t-inherit="mrp.BomOverviewComponent" t-inherit-mode="extension">
+        <xpath expr="//BomOverviewControlPanel" position="attributes">
+            <attribute name="isEvr">isEvr</attribute>
+        </xpath>
+    </t>
+
+</templates>

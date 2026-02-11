@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_purchase_order_form_inherit_enhancement" model="ir.ui.view">
+        <field name="name">purchase.order.form.enhancement</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_form"/>
+        <field name="arch" type="xml">
+            <field name="partner_ref" position="after">
+                <field name="po_type"/>
+                <field name="display_date_po" invisible="not po_type"/>
+                <field name="vendor_status"/>
+
+                <field name="partner_tag_ids" widget="many2many_tags"
+                       context="{'from_purchase_order': True}"
+                       options="{'color_field': 'color', 'no_create_edit': False}"/>
+            </field>
+
+            <xpath expr="//form/header/button[@name='print_quotation']" position="after">
+                <button name="create_purchase_order" string="Split RFQ" type="object"
+                        class="btn-primary" invisible="state != 'draft'"/>
+            </xpath>
+
+            <xpath expr="//field[@name='price_subtotal']" position="after">
+                <field name="vendor_status_line" optional="hide"/>
+                <field name="following_status" optional="hide"/>
+                <field name="days_late" optional="hide" readonly="1" decoration-danger="days_late &lt; 0"/>
+                <field name="project_id"/>
+                <field name="following_note"/>
+            </xpath>
+
+            <xpath expr="//field[@name='sequence']" position="after">
+                <field name="number_line_in_report"/>
+            </xpath>
+
+            <xpath expr="//field[@name='product_id']" position="before">
+                <field name="split_order"/>
+            </xpath>
+
+        </field>
+    </record>
+
+    <record id="view_purchase_order_line_form_inherit_enhancement" model="ir.ui.view">
+        <field name="name">purchase.order.line.form.enhancement</field>
+        <field name="model">purchase.order.line</field>
+        <field name="inherit_id" ref="purchase.purchase_order_line_form2"/>
+        <field name="arch" type="xml">
+            <field name="product_id" position="after">
+                <field name="number_line_in_report"/>
+                <field name="vendor_status_line" invisible="1"/>
+                <field name="following_status" invisible="1"/>
+                <field name="days_late"/>
+                <field name="project_id"/>
+                <field name="following_note"/>
+            </field>
+        </field>
+    </record>
+</odoo>

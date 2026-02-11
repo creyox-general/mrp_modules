@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- =======================
+         TREE VIEW (LIST VIEW)
+    ========================== -->
+    <record id="view_po_line_followup_tree" model="ir.ui.view">
+        <field name="name">po.line.followup.tree</field>
+        <field name="model">purchase.order.line</field>
+        <field name="priority">1</field>
+        <field name="arch" type="xml">
+            <list string="Following PO Lines" editable="top">
+                <field name="order_id" readonly="1"/>
+                <field name="number_line_in_report" readonly="1"/>
+                <field name="partner_id" string="Vendor" readonly="1"/>
+                <field name="date_approve"/>
+                <field name="date_planned" string="Expected Arrival"/>
+                <field name="vendor_status_line"/>
+                <field name="following_status"/>
+                <field name="days_late" decoration-danger="days_late &lt; 0"/>
+                <field name="project_id"/>
+                <field name="buyer_po"/>
+                <!-- Editable ONLY this field -->
+                <field name="following_note"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- =======================
+         SEARCH VIEW
+    ========================== -->
+    <record id="view_po_line_followup_search" model="ir.ui.view">
+        <field name="name">po.line.followup.search</field>
+        <field name="model">purchase.order.line</field>
+        <field name="arch" type="xml">
+            <search string="Search PO Lines">
+                <!-- Search fields -->
+                <field name="order_id"/>
+                <field name="number_line_in_report"/>
+                <field name="partner_id"/>
+                <field name="date_approve"/>
+                <field name="date_planned"/>
+                <field name="vendor_status_line"/>
+                <field name="following_status"/>
+                <field name="days_late"/>
+                <field name="project_id"/>
+                <field name="following_note"/>
+
+                <!-- Group By -->
+                <group expand="1" string="Group By">
+                    <filter string="Vendor" name="group_vendor" context="{'group_by':'partner_id'}"/>
+                    <filter string="Status" name="group_status" context="{'group_by':'following_status'}"/>
+                    <filter string="Vendor Status" name="group_vendor_status" context="{'group_by':'vendor_status_line'}"/>
+                    <filter string="Project" name="group_project" context="{'group_by':'project_id'}"/>
+                    <filter string="PO" name="group_po" context="{'group_by':'order_id'}"/>
+                    <filter string="Arrival Date" name="group_date" context="{'group_by':'date_planned'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- =======================
+         ACTION WINDOW
+    ========================== -->
+    <record id="action_po_line_followup" model="ir.actions.act_window">
+        <field name="name">Following PO Lines</field>
+        <field name="res_model">purchase.order.line</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('order_id.state', 'in', ['purchase', 'done']), ('qty_received', '>=', 0)]</field>
+        <field name="search_view_id" ref="view_po_line_followup_search"/>
+    </record>
+
+</odoo>

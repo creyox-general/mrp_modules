@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="mrp.BomOverviewTable" t-inherit-mode="extension" t-name="cr_mrp_bom_customisation.BomOverviewTableCustom">
+        <xpath expr="//h6[@t-if='data.bom_code']" position="after">
+            <div style="display: none !important;">
+                <h2>
+                    Is EVR:
+                    <i t-if="data.is_evr" class="fa fa-check-square text-success"/>
+                    <i t-if="!data.is_evr" class="fa fa-square-o text-muted"/>
+                </h2>
+            </div>
+        </xpath>
+        <xpath expr="//th[@name='th_mrp_bom_h']" position="before">
+            <th class="text-center" title="Image">Img</th>
+             <th t-if="showDefaultCode" class="text-center" title="Internal Reference">Internal Ref</th>
+            <th t-if="showOldEverestPn" class="text-center" title="Old Everest Part Number">Old Everest PN</th>
+            <th t-if="data.is_evr and showMoInternalRef" class="text-center" title="Mo Internal Ref">MO ref</th>
+        </xpath>
+
+        <xpath expr="//th[@t-if='showAvailabilities'][1]" position="before">
+                        <th t-if="data.is_evr and showCfeQuantity" class="text-center cfe" title="Customer Furnished Equipment">CFE Quantity</th>
+
+             <th t-if="data.is_evr and showLli" class="text-center" style="display: none !important;">LLI</th>
+            <th t-if="data.is_evr and showApproval1" class="text-center">Approval 1</th>
+            <th t-if="data.is_evr and showApproval2" class="text-center approval2">Approval 2</th>
+
+        </xpath>
+
+    </t>
+
+
+</templates>

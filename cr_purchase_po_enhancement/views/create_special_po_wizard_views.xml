@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_create_special_po_wizard_form" model="ir.ui.view">
+        <field name="name">create.special.po.wizard.form</field>
+        <field name="model">create.special.po.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Create Special PO">
+                <group>
+                    <field name="bom_line_id" invisible="1"/>
+                    <field name="product_id" readonly="1"/>
+                    <field name="action_type" widget="radio"/>
+                    <field name="quantity" invisible="action_type != 'new_request_qty'"/>
+                </group>
+                <footer>
+                    <button string="Create Approval Request" type="object" name="action_create_approval" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

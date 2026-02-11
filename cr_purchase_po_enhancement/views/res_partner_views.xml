@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_partner_category_form_inherit_website_vendor" model="ir.ui.view">
+        <field name="name">res.partner.category.form.website.vendor</field>
+        <field name="model">res.partner.category</field>
+        <field name="inherit_id" ref="base.view_partner_category_form"/>
+        <field name="arch" type="xml">
+            <field name="name" position="after">
+                <field name="website_vendor"/>
+                <field name="is_create_from_po"/>
+            </field>
+        </field>
+    </record>
+
+     <record id="base.action_partner_category_form" model="ir.actions.act_window">
+        <field name="domain">[('is_create_from_po', '=', False)]</field>
+    </record>
+
+    <record id="action_partner_category_from_po" model="ir.actions.act_window">
+        <field name="name">PO Contact Tags</field>
+        <field name="res_model">res.partner.category</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('is_create_from_po', '=', True)]</field>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a Partner Category from Purchase Order
+            </p>
+            <p>
+                These are partner categories created from Purchase Orders.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_partner_category_from_po"
+              name="PO Contact Tags"
+              parent="contacts.res_partner_menu_config"
+              action="action_partner_category_from_po"
+              sequence="2"/>
+</odoo>

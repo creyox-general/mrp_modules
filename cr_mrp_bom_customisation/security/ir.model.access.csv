@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_mrp_bom_context,access_mrp_bom_context,model_mrp_bom_context,,1,1,1,1
+access_mrp_bom_line,mrp.bom.line,model_mrp_bom_line,mrp.group_mrp_user,1,1,1,0

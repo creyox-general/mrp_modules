@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+mrp_bom_line_branch_user,mrp_bom_line_branch_user,model_mrp_bom_line_branch,,1,1,1,1
+stock_location_helpers_user,stock_location_helpers_user,model_cr_mrp_bom_branch_location_helper,,1,1,1,1
+access_mrp_bom_line_branch_components_user,access_mrp_bom_line_branch_components_user,model_mrp_bom_line_branch_components,base.group_user,1,1,1,1
+access_mrp_bom_line_branch_components_manager,access_mrp_bom_line_branch_components_manager,model_mrp_bom_line_branch_components,base.group_system,1,1,1,1

@@ -21,7 +21,6 @@ class StockRule(models.Model):
 
         if free_location:
             res['location_dest_id'] = free_location.id
-            print('yes....')
 
         return res
 

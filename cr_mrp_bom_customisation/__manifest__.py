@@ -2,7 +2,7 @@
 # Part of Creyox Technologies.
 {
     'name': 'MRP BOM EVR Customization',
-    'version': '18.0.7.0',
+    'version': '18.0.8.0',
     'summary': 'Add EVR field customization to BOM overview',
     'description': """
         This module adds EVR customization to BOM:

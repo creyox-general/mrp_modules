@@ -56,6 +56,7 @@ class MrpBomLine(models.Model):
             stock_location = warehouse.lot_stock_id if warehouse else False
 
             current_branch_location = branches.location_id.id if branches and branches.location_id else False
+            print('_update_child_mo_quantities :')
             parent_branch_location = mo.parent_mo_id.branch_intermediate_location_id.id if mo.parent_mo_id else False
             final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
 
@@ -532,6 +533,8 @@ class MrpBomLine(models.Model):
             }
 
         # Find Parent MO
+        print('root_bom : ',root_bom)
+        print('self.id : ', self.id)
         parent_mos = self.env['mrp.production'].search([
             ('root_bom_id', '=', root_bom),
             ('line', '=', self.id),

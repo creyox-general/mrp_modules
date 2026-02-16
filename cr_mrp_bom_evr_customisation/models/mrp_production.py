@@ -186,11 +186,11 @@ class MrpProduction(models.Model):
                             "\n".join([f"- {name}" for name in unapproved_lines])
                         )
 
-            branch_intermediate_location = self.env.context.get('branch_intermediate_location')
-
-            # Store intermediate location
-            if branch_intermediate_location:
-                vals['branch_intermediate_location_id'] = branch_intermediate_location
+            # branch_intermediate_location = self.env.context.get('branch_intermediate_location')
+            #
+            # # Store intermediate location
+            # if branch_intermediate_location:
+            #     vals['branch_intermediate_location_id'] = branch_intermediate_location
 
         # PART 2: Create MOs with skip context to prevent component computation
         skip_moves = self.env.context.get('skip_component_moves')
@@ -668,17 +668,17 @@ class MrpProduction(models.Model):
     #
     #     return moves
 
-    def _get_consumption_issues(self):
-        """Override to use branch location instead of Pre-Production"""
-        issues = super()._get_consumption_issues()
-
-        if self.branch_intermediate_location_id:
-            # Update location references in issues
-            for issue in issues:
-                if 'Pre-Production' in str(issue.get('location', '')):
-                    issue['location'] = self.branch_intermediate_location_id.display_name
-
-        return issues
+    # def _get_consumption_issues(self):
+    #     """Override to use branch location instead of Pre-Production"""
+    #     issues = super()._get_consumption_issues()
+    #
+    #     if self.branch_intermediate_location_id:
+    #         # Update location references in issues
+    #         for issue in issues:
+    #             if 'Pre-Production' in str(issue.get('location', '')):
+    #                 issue['location'] = self.branch_intermediate_location_id.display_name
+    #
+    #     return issues
 
     @api.model
     def _prepare_procurement_values(self, product_id, product_qty, product_uom, location_id, name, origin, company_id,
@@ -688,6 +688,7 @@ class MrpProduction(models.Model):
                                                   company_id, values)
 
         if self.branch_intermediate_location_id:
+            print('in _prepare_procurement_values')
             res['branch_intermediate_location'] = self.branch_intermediate_location_id.id
 
         return res

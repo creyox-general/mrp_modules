@@ -21,35 +21,35 @@ patch(BomOverviewControlPanel.prototype, {
 
     async manufactureFromBoM() {
 
-    if (this.props.data.is_evr) {
-        try {
-            const result = await this.orm.call(
-                "mrp.production",
-                "action_validate_and_create_mo",
-                [this.props.data.bom_id]
-            );
-
-            // 🔹 Show messages from backend
-            if (result.messages) {
-                result.messages.forEach((m) => {
-                    this.notification.add(m.msg, {
-                        title: "PO Creation",
-                        type: m.type || "info",
-                    });
-                });
-            }
-
-            return this.action.doAction(result.action);
-        } catch (e) {
-            const msg = (e && e.data && e.data.message) || e.message || "Validation failed before Manufacture.";
-            this.notification.add(msg, {
-                title: "Purchase Order Validation",
-                type: "danger",
-                sticky: true,
-            });
-            return;
-        }
-    }
+//    if (this.props.data.is_evr) {
+//        try {
+//            const result = await this.orm.call(
+//                "mrp.production",
+//                "action_validate_and_create_mo",
+//                [this.props.data.bom_id]
+//            );
+//
+//            // 🔹 Show messages from backend
+//            if (result.messages) {
+//                result.messages.forEach((m) => {
+//                    this.notification.add(m.msg, {
+//                        title: "PO Creation",
+//                        type: m.type || "info",
+//                    });
+//                });
+//            }
+//
+//            return this.action.doAction(result.action);
+//        } catch (e) {
+//            const msg = (e && e.data && e.data.message) || e.message || "Validation failed before Manufacture.";
+//            this.notification.add(msg, {
+//                title: "Purchase Order Validation",
+//                type: "danger",
+//                sticky: true,
+//            });
+//            return;
+//        }
+//    }
 
     const action = {
         res_model: "mrp.production",

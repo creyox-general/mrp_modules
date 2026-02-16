@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'MRP Buy/Make Customisation',
-    'version': '18.0.2.0.0',
+    'version': '18.0.4.0.0',
     'category': 'Manufacturing',
     'summary': 'Add Buy/Make selection in BOM overview for products',
     'description': """
@@ -14,7 +14,7 @@
     "author": "Creyox Technologies",
     "website": "https://www.creyox.com",
     'depends': ['mrp', 'purchase', 'stock', "cr_mrp_bom_customisation",
-        "cr_mrp_bom_evr_customisation","cr_mrp_bom_evr_automation",'bus'],
+        "cr_mrp_bom_evr_customisation","cr_mrp_bom_evr_automation",'bus','cr_custom_internal_transfer'],
     'data': [
         'views/stock_picking.xml',
         'views/product_category_views.xml',

@@ -2,7 +2,7 @@
 # Part of Creyox Technologies
 {
     'name': 'Purchase Order Enhancement',
-    'version': '18.0.0.17',
+    'version': '18.0.0.18',
     'category': 'Purchase',
     'summary': 'Enhanced PO management with types, vendor status, and follow-up',
     'depends': [

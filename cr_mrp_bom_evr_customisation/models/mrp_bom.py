@@ -152,9 +152,9 @@ class MrpBom(models.Model):
                     ('root_bom_id', '=', bom.id),
                     ('state', '=', 'draft')
                 ])
-                for mo in mos:
-                    if mo.location_dest_id != bom.cfe_project_location_id:
-                        mo.location_dest_id = bom.cfe_project_location_id.id
+                # for mo in mos:
+                #     if mo.location_dest_id != bom.cfe_project_location_id:
+                #         mo.location_dest_id = bom.cfe_project_location_id.id
 
             # Handle lines changes (new or modified)
             if bom.id in old_line_ids and bom.cfe_project_location_id:

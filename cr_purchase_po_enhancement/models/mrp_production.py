@@ -33,6 +33,7 @@ class MrpProduction(models.Model):
 
             # Store intermediate location
             if branch_intermediate_location:
+                print('>>>branch_intermediate_location : ',branch_intermediate_location)
                 vals['branch_intermediate_location_id'] = branch_intermediate_location
 
         # PART 2: Create MOs WITHOUT skipping component moves when called from write

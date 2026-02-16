@@ -150,6 +150,18 @@ class MrpBomLine(models.Model):
         if not bom_line:
             return
 
+        if self.bom_line_branch_id and self.bom_line_branch_id.transferred > 0:
+            self.to_order = 0
+            self.to_order_cfe = 0
+            self.ordered = 0
+            self.ordered_cfe = 0
+            self.to_transfer = 0
+            self.to_transfer_cfe = 0
+            self.transferred = 0
+            self.transferred_cfe = 0
+            self.used = 0
+            return
+
         # Skip if BUY/MAKE product without selection
         if (bom_line.product_id.manufacture_purchase == 'buy_make' and
                 not bom_line.buy_make_selection):
@@ -163,11 +175,11 @@ class MrpBomLine(models.Model):
         if not (bom_line.approval_1 and bom_line.approval_2):
             return
 
-        # Process CFE flow
-        self._process_cfe_flow()
+        if bom_line.cfe_quantity != self.transferred_cfe:
+            self._process_cfe_flow()
 
-        # Process regular purchase flow
-        self._process_regular_flow()
+        if bom_line.product_qty != self.transferred:
+            self._process_regular_flow()
 
     def _is_tapy_location(self, location):
         """Check if location or any parent is TAPY"""
@@ -422,7 +434,7 @@ class MrpBomLine(models.Model):
                         })
 
                     existing_picking.origin = f"EVR Flow - {self.root_bom_id.display_name}"
-                    existing_picking.root_bom_id = self.roott_bom_id.id
+                    existing_picking.root_bom_id = self.root_bom_id.id
                     existing_picking.action_confirm()
 
                     existing_demand += transfer_qty

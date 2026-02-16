@@ -3,7 +3,7 @@
 {
     "name": "MRP BOM EVR Customisation",
     "summary": "Custom enhancements for MRP BOM and EVR processes",
-    "version": "18.0.0.13",
+    "version": "18.0.0.14",
     "category": "Manufacturing",
     "license": "LGPL-3",
     'author': 'Creyox Technologies',

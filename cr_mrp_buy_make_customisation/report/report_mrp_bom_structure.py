@@ -234,9 +234,7 @@ class ReportBomStructureBranch(models.AbstractModel):
         root_bom = self.env['mrp.bom'].browse(root_bom_id) if root_bom_id else False
 
         if root_bom_id and bom_line:
-            print('')
-            print('')
-            print('1> : ', bom_line.product_id.name)
+
             # Check if this should be treated as component
             treat_as_component = (
                     (bom_line.child_bom_id and
@@ -247,7 +245,6 @@ class ReportBomStructureBranch(models.AbstractModel):
 
             if treat_as_component:
                 # Treat as component - show component fields instead of branch
-                print('yes treat as component')
                 Component = self.env["mrp.bom.line.branch.components"]
 
                 component_rec = self._get_component_for_line(root_bom_id, bom_line, parent_bom, index)
@@ -259,7 +256,6 @@ class ReportBomStructureBranch(models.AbstractModel):
 
                 # Show component fields
                 if component_rec:
-                    print('yes component')
                     data['componentId'] = component_rec.id
                     data['free_to_use'] = component_rec.free_to_use
                     data['display_free_to_use'] = True
@@ -349,7 +345,6 @@ class ReportBomStructureBranch(models.AbstractModel):
                     product = self.env['product.product'].browse(data['product_id'])
                     main_vendor = product.seller_ids.filtered(lambda s: s.main_vendor) if product else False
                     data['has_main_vendor'] = bool(main_vendor)
-                    print("main : ",data['has_main_vendor'])
 
                     main_vendor_line = bom_line.product_id.product_tmpl_id.seller_ids.filtered(lambda s: s.main_vendor)
 
@@ -372,7 +367,6 @@ class ReportBomStructureBranch(models.AbstractModel):
 
                     data['product_manufacturer_editable'] = True
 
-                    print('manu : ',data['product_manufacturer_editable'])
 
                 else:
                     # No component record - show defaults
@@ -478,7 +472,7 @@ class ReportBomStructureBranch(models.AbstractModel):
             parent_bom, parent_product, warehouse, bom_line,
             line_quantity, level, index, product_info, ignore_stock
         )
-        print('2> : ', bom_line.product_id.name)
+
         data['purchase_group_editable'] = False
 
         if not bom_line:
@@ -546,7 +540,6 @@ class ReportBomStructureBranch(models.AbstractModel):
         product = bom_line.product_id if bom_line else parent_product
         main_vendor = product.seller_ids.filtered(lambda s: s.main_vendor) if product else False
         data['has_main_vendor'] = bool(main_vendor)
-        print('>> main : ',data['has_main_vendor'])
 
         # ============= BUY/MAKE FUNCTIONALITY =============
         # Add buy_make selection data
@@ -592,9 +585,6 @@ class ReportBomStructureBranch(models.AbstractModel):
 
     def _get_component_for_line(self, root_bom_id, bom_line, parent_bom, index):
         """Get component record for line - handles BUY-selected BOM lines"""
-        print('root_bom_id : ',root_bom_id)
-        print('bom_line : ', bom_line)
-        print('parent_bom : ', parent_bom)
 
         Component = self.env["mrp.bom.line.branch.components"]
 
@@ -605,7 +595,6 @@ class ReportBomStructureBranch(models.AbstractModel):
         is_buy = bom_line.product_id.manufacture_purchase == 'buy'
 
         treat_as_component = not has_child_bom or (has_child_bom and is_buy_make and is_buy_selected) or is_buy
-        print('treat_as_component : ',treat_as_component)
 
         if not treat_as_component:
             return False
@@ -619,7 +608,7 @@ class ReportBomStructureBranch(models.AbstractModel):
                 ('cr_bom_line_id', '=', bom_line.id),
                 ('is_direct_component', '=', True),
             ], limit=1)
-            print('1 component : ',component)
+
             return component if component else False
 
         # For child level
@@ -629,7 +618,6 @@ class ReportBomStructureBranch(models.AbstractModel):
             ('cr_bom_line_id', '=', bom_line.id),
             ('is_direct_component', '=', False),
         ], limit=1)
-        print('2 component : ', component)
 
         return component if component else False
 

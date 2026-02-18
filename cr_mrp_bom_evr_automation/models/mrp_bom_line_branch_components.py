@@ -18,7 +18,7 @@ class MrpBomLineBranchComponents(models.Model):
             return
 
         # Check if approvals are TRUE
-        if not (bom_line.approval_1 and bom_line.approval_2):
+        if not (self.approval_1 and self.approval_2):
             return
 
         # Process CFE flow
@@ -31,7 +31,7 @@ class MrpBomLineBranchComponents(models.Model):
         """Process CFE (Customer Furnished Equipment) flow"""
         self.ensure_one()
         bom_line = self.cr_bom_line_id
-        cfe_qty = float(bom_line.cfe_quantity or 0)
+        cfe_qty = float(self.cfe_quantity or 0)
 
         if cfe_qty <= 0:
             return
@@ -99,8 +99,9 @@ class MrpBomLineBranchComponents(models.Model):
         self.ensure_one()
 
         bom_line = self.cr_bom_line_id
-        cfe_qty = float(bom_line.cfe_quantity or 0)
-        total_qty = self._get_actual_component_quantity()
+        cfe_qty = float(self.cfe_quantity or 0)
+        # total_qty = self._get_actual_component_quantity()
+        total_qty = self.quantity
         x_qty = total_qty - cfe_qty
         if x_qty <= 0:
             return

@@ -11,14 +11,14 @@ class PurchaseOrderLine(models.Model):
         string="MRP BOM",
     )
 
-    # def _prepare_stock_moves(self, picking):
-    #     moves = super()._prepare_stock_moves(picking)
-    #
-    #     for move_vals in moves:
-    #         # Check if PO has a CFE project location
-    #         cfe_location = self.order_id.cfe_project_location_id
-    #         if cfe_location:
-    #             move_vals['location_dest_id'] = cfe_location.id
-    #
-    #     return moves
+    def _prepare_stock_moves(self, picking):
+        moves = super()._prepare_stock_moves(picking)
+
+        for move_vals in moves:
+            # Check if PO has a CFE project location
+            cfe_location = self.order_id.cfe_project_location_id
+            if cfe_location:
+                move_vals['location_dest_id'] = cfe_location.id
+
+        return moves
 

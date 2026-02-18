@@ -43,16 +43,16 @@ class MrpBomLine(models.Model):
                 for l in line.bom_id.bom_line_ids
             )
 
-    @api.constrains('approval_1', 'approval_2', 'approve_to_manufacture')
-    def _check_buy_make_selection(self):
-        """Prevent approval if buy_make_selection is not set for buy_make products"""
-        for line in self:
-            if line.is_buy_make_product:
-                if (line.approval_1 or line.approval_2) and not line.buy_make_selection:
-                    raise UserError(
-                        f"Please select BUY or MAKE option for product '{line.product_id.name}' "
-                        "before marking approvals."
-                    )
+    # @api.constrains('approval_1', 'approval_2', 'approve_to_manufacture')
+    # def _check_buy_make_selection(self):
+    #     """Prevent approval if buy_make_selection is not set for buy_make products"""
+    #     for line in self:
+    #         if line.is_buy_make_product:
+    #             if (line.approval_1 or line.approval_2) and not line.buy_make_selection:
+    #                 raise UserError(
+    #                     f"Please select BUY or MAKE option for product '{line.product_id.name}' "
+    #                     "before marking approvals."
+    #                 )
 
     def _find_actual_root_bom(self, line):
         """Find root by traversing upward through parent BOMs"""
@@ -334,13 +334,16 @@ class MrpBomLine(models.Model):
             po_lines = self.env['purchase.order.line'].search([
                 ('product_id', '=', bom_line.product_id.id),
                 ('order_id.state', 'in', ['draft', 'sent', 'to approve']),
+                ('bom_id','=',root_bom.id)
             ])
 
             for po_line in po_lines:
-                pickings = po_line.order_id.picking_ids.filtered(
-                    lambda p: p.location_dest_id.id == root_bom.cfe_project_location_id.id
-                              or root_bom.cfe_project_location_id.id in p.location_dest_id.parent_path.split('/')
-                )
+                # pickings = po_line.order_id.picking_ids.filtered(
+                #     lambda p: p.location_dest_id.id == root_bom.cfe_project_location_id.id
+                #               or root_bom.cfe_project_location_id.id in p.location_dest_id.parent_path.split('/')
+                # )
+
+                pickings = po_line.order_id.picking_ids
 
                 if pickings:
                     deleted_pos.append({
@@ -357,34 +360,37 @@ class MrpBomLine(models.Model):
         recursive_cleanup_pos(line)
         return deleted_pos
 
-    def _cleanup_stock_pickings(self, line, root_bom):
-        """Cancel stock pickings - returns list of cancelled transfers"""
-        cancelled_transfers = []
-
-        def recursive_cleanup_pickings(bom_line):
-            nonlocal cancelled_transfers
-
-            pickings = self.env['stock.picking'].search([
-                ('state', 'in', ['draft', 'waiting', 'confirmed', 'assigned']),
-                ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id)
-            ])
-
-            for picking in pickings:
-                moves = picking.move_ids.filtered(lambda m: m.product_id.id == bom_line.product_id.id)
-                if moves:
-                    cancelled_transfers.append({
-                        'transfer_name': picking.name,
-                        'product': bom_line.product_id.display_name
-                    })
-                    _logger.info(f"  ✗ Cancelling transfer: {picking.name}")
-                    picking.action_cancel()
-
-            if bom_line.child_bom_id:
-                for child_line in bom_line.child_bom_id.bom_line_ids:
-                    recursive_cleanup_pickings(child_line)
-
-        recursive_cleanup_pickings(line)
-        return cancelled_transfers
+    # def _cleanup_stock_pickings(self, line, root_bom):
+    #     """Cancel stock pickings - returns list of cancelled transfers"""
+    #     cancelled_transfers = []
+    #
+    #     def recursive_cleanup_pickings(bom_line):
+    #         nonlocal cancelled_transfers
+    #
+    #         origin = f"EVR Flow - {self.root_bom_id.display_name}"
+    #         pickings = self.env['stock.picking'].search([
+    #             ('root_bom_id','=',root_bom.id)
+    #             ('state', 'in', ['draft', 'waiting', 'confirmed', 'assigned']),
+    #             ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id),
+    #             ('origin','=',origin)
+    #         ])
+    #
+    #         for picking in pickings:
+    #             moves = picking.move_ids.filtered(lambda m: m.product_id.id == bom_line.product_id.id)
+    #             if moves:
+    #                 cancelled_transfers.append({
+    #                     'transfer_name': picking.name,
+    #                     'product': bom_line.product_id.display_name
+    #                 })
+    #                 _logger.info(f"  ✗ Cancelling transfer: {picking.name}")
+    #                 picking.action_cancel()
+    #
+    #         if bom_line.child_bom_id:
+    #             for child_line in bom_line.child_bom_id.bom_line_ids:
+    #                 recursive_cleanup_pickings(child_line)
+    #
+    #     recursive_cleanup_pickings(line)
+    #     return cancelled_transfers
 
     def _cleanup_branch_records(self, line, root_bom):
         """Delete branch and component records - returns counts"""
@@ -548,12 +554,20 @@ class MrpBomLine(models.Model):
         def recursive_cleanup_pickings(bom_line):
             nonlocal cancelled_transfers, reversed_transfers
 
-            # Find pickings going to branch locations
+            # # Find pickings going to branch locations
+            # pickings = self.env['stock.picking'].search([
+            #     ('origin', '=', 'EVR Flow - Purchase'),
+            #     ('state', 'in', ['draft', 'waiting', 'confirmed', 'assigned']),
+            #     ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id),
+            #     ('root_bom_id', '=', root_bom.id),
+            # ])
+
+            origin = f"EVR Flow - {root_bom.display_name}"
             pickings = self.env['stock.picking'].search([
-                ('origin', '=', 'EVR Flow - Purchase'),
+                ('root_bom_id', '=', root_bom.id),
                 ('state', 'in', ['draft', 'waiting', 'confirmed', 'assigned']),
                 ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id),
-                ('root_bom_id', '=', root_bom.id),
+                ('origin', '=', origin)
             ])
 
             for picking in pickings:
@@ -569,11 +583,19 @@ class MrpBomLine(models.Model):
                     picking.action_cancel()
 
             # Find done pickings that transferred to branch - create reverse
+            # done_pickings = self.env['stock.picking'].search([
+            #     ('origin', '=', 'EVR Flow - Purchase'),
+            #     ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id),
+            #     ('state', '=', 'done'),
+            #     ('root_bom_id', '=', root_bom.id),
+            # ])
+
+            origin = f"EVR Flow - {root_bom.display_name}"
             done_pickings = self.env['stock.picking'].search([
-                ('origin', '=', 'EVR Flow - Purchase'),
-                ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id),
-                ('state', '=', 'done'),
                 ('root_bom_id', '=', root_bom.id),
+                ('state', '=', 'done'),
+                ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id),
+                ('origin', '=', origin)
             ])
 
             for picking in done_pickings:
@@ -627,10 +649,11 @@ class MrpBomLine(models.Model):
         if not picking_type:
             return False
 
+
         picking = self.env['stock.picking'].create({
             'picking_type_id': picking_type.id,
             'location_id': original_move.location_dest_id.id,
-            'location_dest_id': free_location.id,
+            'location_dest_id': original_move.location_id.id,
             'origin': f"Reverse - {original_move.picking_id.name}",
             'move_ids': [(0, 0, {
                 'name': original_move.product_id.display_name,

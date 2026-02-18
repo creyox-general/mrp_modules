@@ -7,6 +7,36 @@ class MrpBomLineBranchComponents(models.Model):
     _name = "mrp.bom.line.branch.components"
     _description = "Branch components per BOM per path"
 
+    quantity = fields.Float(
+        string='Quantity',
+    )
+    cfe_quantity = fields.Char(
+        string='CFE Quantity',
+        help="Customer Furnished Equipment quantity - supplied by customer at zero cost"
+    )
+    approval_1 = fields.Boolean(string='Approval 1', default=False)
+    approval_2 = fields.Boolean(string='Approval 2', default=False)
+    mo_internal_ref = fields.Many2one(
+        comodel_name="product.supplierinfo",
+        string="Preferred Manufacturer",
+        help="Select the manufacturer/vendor defined on the product card."
+    )
+    product_manufacturer_id = fields.Many2one(comodel_name="product.manufacturer.detail", string='')
+    can_edit_approval_2 = fields.Boolean(
+        string='Can Edit Approval 2',
+        compute='_compute_can_edit_approval_2',
+        help="Technical field to check if user can edit Approval 2"
+    )
+    show_cfe_quantity = fields.Boolean(
+        string='Show CFE Quantity',
+        compute='_compute_show_cfe_quantity',
+        store=True,
+        help="Technical field to control CFE quantity visibility"
+    )
+    show_approval_1 = fields.Boolean(compute='_compute_show_cfe_quantity', store=True)
+    show_approval_2 = fields.Boolean(compute='_compute_show_cfe_quantity', store=True)
+    show_mo_internal_ref = fields.Boolean(compute='_compute_show_cfe_quantity', store=True)
+
     bom_line_branch_id = fields.Many2one('mrp.bom.line.branch', string='BOM Line Branch', ondelete='cascade')
     root_bom_id = fields.Many2one('mrp.bom', string='Root BOM', ondelete='cascade')
     bom_id = fields.Many2one('mrp.bom', string='Just Child BOM', ondelete='cascade')
@@ -31,6 +61,32 @@ class MrpBomLineBranchComponents(models.Model):
     )
     customer_po_ids = fields.One2many('purchase.order.line',inverse_name='component_customer_po_id',string='Customer PO Line')
     vendor_po_ids = fields.One2many('purchase.order.line',inverse_name='component_vendor_po_id', string='Vendor PO Line')
+
+    @api.depends('bom_id.is_evr')
+    def _compute_show_cfe_quantity(self):
+        """Compute whether CFE quantity and new fields should be shown"""
+        for line in self:
+            show = line.bom_id.is_evr
+            line.show_cfe_quantity = show
+            line.show_approval_1 = show
+            line.show_approval_2 = show
+            line.show_mo_internal_ref = show
+
+    @api.depends_context('uid')
+    def _compute_can_edit_approval_2(self):
+        """Check if current user can edit Approval 2 (only Manufacture/Admin or Purchase/Admin)"""
+        user = self.env.user
+        can_edit = user.has_group('mrp.group_mrp_manager') or user.has_group('purchase.group_purchase_manager')
+        for line in self:
+            line.can_edit_approval_2 = can_edit
+
+    def set_product_manufacturer_id(self,data):
+        for line in self:
+            pmd = self.env['product.manufacturer.detail'].browse(data)
+            print('pmd : ',pmd)
+            if pmd:
+                line.product_manufacturer_id = pmd.id
+
 
     @api.depends(
         'cr_bom_line_id.product_id',

@@ -4,26 +4,85 @@
        t-inherit-mode="extension"
        t-name="cr_mrp_bom_customisation.BomOverviewLineBranch">
 
-<!--        <xpath expr="//a[@t-on-click.prevent='() => this.goToAction(data.link_id, data.link_model)']" position="attributes">-->
-<!--            <attribute name="t-attf-class">{{ !data.has_main_vendor ? 'text-danger' : '' }}</attribute>-->
-<!--        </xpath>-->
+
+        <xpath expr="//td[@name='td_mrp_bom']" position="before">
+             <td class="text-center" style="width: 50px;">
+                <t t-if="data.product_id">
+                     <img t-att-src="'/web/image/product.product/' + data.product_id + '/image_128'"
+                          style="max-height:32px; max-width:32px; border-radius: 4px; cursor: pointer;"
+                          t-att-alt="data.product_name"
+                          t-att-title="'Click to enlarge ' + data.product_name"
+                          t-on-click="() => this.openImageModal(data.product_id, data.name || data.product_name || data.display_name)"
+                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"/>
+
+                    <span class="text-muted" style="display:none;">No Img</span>
+                </t>
+                 <t t-else="">
+                    <span class="text-muted">No Img</span>
+                </t>
+            </td>
+
+             <td t-if="props.showOptions.defaultCode" class="text-center">
+        <span t-if="data.default_code" t-esc="data.default_code"/>
+                 <span t-else="" class="text-muted"></span>
+    </td>
+             <td t-if="props.showOptions.oldEverestPn" class="text-center">
+        <span t-if="data.old_everest_pn" t-esc="data.old_everest_pn"/>
+                 <span t-else="" class="text-muted"></span>
+    </td>
+
+             <td t-if="data.is_evr and props.showOptions.moInternalRef" class="text-center">
+
+                    <select t-if="data.product_manufacturer_editable"
+                            class="form-select form-select-sm"
+                            t-att-data-bom-line-id="data.bom_line_id"
+                            t-model="data.product_manufacturer_id"
+                            t-on-change="onProductManufacturerChange">
+
+                        <option value="">Select Manufacturer Ref</option>
+                        <t t-foreach="data.available_manufacturers" t-as="mref" t-key="mref.id">
+                            <option t-att-value="mref.id">
+                                <t t-esc="mref.ref"/>
+                            </option>
+                        </t>
+                    </select>
+                 <span t-else="" class="text-muted"></span>
+                </td>
+         </xpath>
 
 
-                <xpath expr="//td[@name='td_mrp_bom']" position="after">
-                         <td t-if="data.is_evr and props.showOptions.approveToManufacture" class="text-center">
-                            <input t-if="data.approve_to_manufacture_editable"
-                                   type="checkbox"
-                                   class="form-check-input"
-                                   t-model="data.approve_to_manufacture"
-                                   t-att-data-bom-line-id="data.bom_line_id"
-                                   t-on-change="onApproveToManufactureChange"/>
-                            <span t-elif="data.approve_to_manufacture"
-                                  class="badge badge-success bg-success text-white">✓</span>
-                            <span t-else="" class="text-muted"></span>
-                        </td>
-                </xpath>
+        <xpath expr="//td[@name='td_mrp_bom']" position="after">
+                 <td t-if="data.is_evr and props.showOptions.approveToManufacture" class="text-center">
+                    <input t-if="data.approve_to_manufacture_editable"
+                           type="checkbox"
+                           class="form-check-input"
+                           t-model="data.approve_to_manufacture"
+                           t-att-data-bom-line-id="data.bom_line_id"
+                           t-on-change="onApproveToManufactureChange"/>
+                     <span t-elif="data.approve_to_manufacture"
+                           class="badge badge-success bg-success text-white">✓</span>
+                     <span t-else="" class="text-muted"></span>
+                </td>
+        </xpath>
 
-        <xpath expr="//td[contains(@t-if, 'props.showOptions.cfeQuantity')]" position="after">
+
+        <xpath expr="//td[@t-if='showAvailabilities'][1]" position="before">
+            <td t-if="data.is_evr and props.showOptions.cfeQuantity" class="text-center cfe_data">
+                    <input t-if="data.cfe_editable"
+                           type="text"
+                           class="form-control form-control-sm cfe-quantity-input"
+                           t-att-data-bom-line-id="data.bom_line_id"
+                           t-model="data.cfe_quantity"
+                           placeholder="CFE Qty"
+                           style="width: 80px; margin: 0 auto;"
+                           t-on-blur="onCfeQuantityChange"/>
+                <span t-elif="data.has_cfe_quantity"
+                      class="badge badge-info bg-info text-white">
+                        CFE: <t t-esc="data.cfe_quantity"/>
+                    </span>
+                <span t-else="" class="text-muted"></span>
+            </td>
+
             <td t-if="data.is_evr" class="text-center">
                 <t t-if="data.branch">
                     <span t-esc="data.branch"/>
@@ -32,11 +91,40 @@
                     <span class="text-muted"></span>
                 </t>
             </td>
-        </xpath>
 
-        <xpath expr="//td[contains(@t-if, 'props.showOptions.approval2')]" position="after">
+            <td t-if="data.is_evr and props.showOptions.approval1" class="text-center">
+                <input t-if="data.approval_1_editable"
+                       type="checkbox"
+                       class="form-check-input"
+                       t-model="data.approval_1"
+                       t-att-data-bom-line-id="data.bom_line_id"
+                       t-on-change="onApproval1Change"/>
+                <span t-elif="data.approval_1"
+                      class="badge badge-success bg-success text-white">
+                      ✓ App1
+                </span>
+                <span t-else="" class="text-muted"></span>
+            </td>
 
-           <td t-if="data.is_evr and props.showOptions.customerRef" class="text-center">
+            <td t-if="data.is_evr and props.showOptions.approval2" class="text-center">
+                <input t-if="data.approval_2_editable and data.can_edit_approval_2"
+                       type="checkbox"
+                       class="form-check-input"
+                       t-model="data.approval_2"
+                       t-att-data-bom-line-id="data.bom_line_id"
+                       t-on-change="onApproval2Change"/>
+                <input t-elif="data.approval_2_editable and !data.can_edit_approval_2"
+                       type="checkbox"
+                       class="form-check-input"
+                       t-model="data.approval_2"
+                       t-att-data-bom-line-id="data.bom_line_id"
+                       disabled="1"
+                       title="Only Manufacturing/Admin or Purchase/Admin can edit this field"/>
+                <span t-else="" class="text-muted"></span>
+            </td>
+
+
+            <td t-if="data.is_evr and props.showOptions.customerRef" class="text-center">
                 <input t-if="data.customer_ref_editable"
                        type="text"
                        class="form-control form-control-sm"
@@ -49,10 +137,6 @@
                 <span t-else="" class="text-muted"></span>
             </td>
 
-<!--            <td t-if="data.is_evr and props.showOptions.poLineId" class="text-center">-->
-<!--                <span t-if="data.po_line_name" t-esc="data.po_line_name"/>-->
-<!--                <span t-else="" class="text-muted"></span>-->
-<!--            </td>-->
 
             <td t-if="data.is_evr and props.showOptions.poLineId" class="text-center">
                 <t t-if="data.po_data and data.po_data.length > 0">
@@ -122,7 +206,7 @@
                       <t t-if="data.purchase_group_editable">
                     <span t-esc="data.transferred"/>
                     </t>
-                     <t t-elif="data.transferred_editable">
+                    <t t-elif="data.transferred_editable">
                          <span t-esc="data.transferred"/>
                      </t>
                     <t t-else="">
@@ -150,21 +234,22 @@
                 </td>
             </t>
 
-              <td t-if="data.is_evr and props.showOptions.freeToUse" class="text-center">
+            <td t-if="data.is_evr and props.showOptions.freeToUse" class="text-center">
                   <t t-if="data.display_free_to_use">
                        <span t-esc="data.free_to_use"/>
                   </t>
-                  <t t-else=""/>
+                <t t-else=""/>
 
             </td>
-
 
         </xpath>
 
 
-                <!-- Display Cost Fields - Replace existing cost columns -->
+        <!-- Display Cost Fields - Replace existing cost columns -->
         <xpath expr="//td[@t-if='showCosts'][1]" position="replace">
-            <td t-if="props.showOptions.displayCost" t-attf-class="text-end {{ data.type == 'component' ? 'opacity-50' : '' }}" t-esc="formatMonetary(data.bom_cost)"/>
+            <td t-if="props.showOptions.displayCost"
+                t-attf-class="text-end {{ data.type == 'component' ? 'opacity-50' : '' }}"
+                t-esc="formatMonetary(data.bom_cost)"/>
         </xpath>
 
         <xpath expr="//td[@t-if='showCosts'][1]" position="replace">

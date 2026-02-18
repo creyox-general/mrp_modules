@@ -34,28 +34,8 @@
             <field name="arch" type="xml">
                 <!-- Add CFE quantity field after product_qty -->
                 <field name="product_qty" position="after">
-                    <field name="show_cfe_quantity" invisible="1"/>
-                    <field name="cfe_quantity"
-                           string="CFE Quantity"
-                           placeholder="Customer supplied quantity"
-                           invisible="[('show_cfe_quantity', '=', False)]"/>
-                    <field name="lli" invisible="1"/>
-                    <field name="approval_1" invisible="1"/>
-                    <field name="approval_2" invisible="1"/>
-                    <field name="show_lli" invisible="1"/>
-                    <field name="show_approval_1" invisible="1"/>
-                    <field name="show_approval_2" invisible="1"/>
-                    <field name="mo_internal_ref" invisible="1"/>
-                    <field name="show_mo_internal_ref" invisible="1"/>
-                    <field name="po_created"/>
-                    <field name="customer_po_created"/>
-                    <field name="vendor_po_created"/>
-                    <field name="product_manufacturer_id"/>
-                    <field name="can_edit_approval_2"/>
                     <field name="product_default_code"/>
                     <field name="product_old_everest_pn"/>
-                    <field name="po_line_id"/>
-                    <field name="customer_po_line_id"/>
                 </field>
             </field>
         </record>

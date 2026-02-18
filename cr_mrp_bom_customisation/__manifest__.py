@@ -2,7 +2,7 @@
 # Part of Creyox Technologies.
 {
     'name': 'MRP BOM EVR Customization',
-    'version': '18.0.8.0',
+    'version': '18.0.9.0',
     'summary': 'Add EVR field customization to BOM overview',
     'description': """
         This module adds EVR customization to BOM:
@@ -14,16 +14,10 @@
     'category': 'Manufacturing',
     'depends': ['mrp', 'project','purchase','stock','purchase_stock','purchase_mrp','bizzup_product_customisation','mrp_plm'],
     'data': [
-        'security/ir.model.access.csv',
         'views/mrp_bom_view.xml',
         'views/purchase_order.xml',
         'views/purchase_order_line.xml'
     ],
-   'assets': {
-        'web.assets_backend': [
-            'cr_mrp_bom_customisation/static/src/**/*',
-        ],
-    },
     "license": "OPL-1",
     "installable": True,
     "application": False,

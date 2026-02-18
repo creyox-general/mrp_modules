@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of Creyox Technologies.
 from odoo import models, api
-
+import base64
 
 class ReportBomStructureBranch(models.AbstractModel):
     _inherit = 'report.mrp.report_bom_structure'
@@ -88,12 +88,14 @@ class ReportBomStructureBranch(models.AbstractModel):
             data["branch"] = ""
             data['bom_line_id'] = bom_line.id if bom_line else False
 
-        # product = self.env['product.product'].browse(data['product_id'])
-        # print('product : ',product)
-        # main_vendor = product.seller_ids.filtered(lambda s: s.main_vendor) if product else False
-        # print('main_vendor : ', main_vendor)
-        # data['has_main_vendor'] = bool(main_vendor)
-        # print('has_main_vendor : ', data['has_main_vendor'])
+        data['is_evr'] = bool(root_bom and root_bom.is_evr)
+        data['bom_id'] = bom.id if bom else False
+        data['root_bom_id'] = root_bom_id
+        data['root_is_evr'] = data['is_evr']
+        product = data['product']
+        data['default_code'] = product.default_code or ''
+        data['old_everest_pn'] = product.old_everest_pn or ''
+
         return data
 
     def _get_component_data(self, parent_bom, parent_product, warehouse, bom_line,
@@ -120,7 +122,33 @@ class ReportBomStructureBranch(models.AbstractModel):
         if not root_bom.is_evr:
             return data
 
-        data['customer_ref'] = bom_line.customer_ref or ''
+
+        if bom_line and bom_line.product_id:
+            data['product_id'] = bom_line.product_id.id
+            data['product_name'] = bom_line.product_id.display_name
+            data['default_code'] = bom_line.product_id.default_code or ''
+            data['old_everest_pn'] = bom_line.product_id.old_everest_pn or ''
+
+            # Debug image field
+            image_field = bom_line.product_id.image_128
+
+            if image_field:
+                try:
+                    # Method 1: Direct assignment (if it's already base64 string)
+                    if isinstance(image_field, str):
+                        data['product_image'] = image_field
+                    # Method 2: Binary to base64 conversion
+                    elif isinstance(image_field, bytes):
+                        data['product_image'] = base64.b64encode(image_field).decode('utf-8')
+                    else:
+                        # Method 3: For other field types
+                        data['product_image'] = str(image_field)
+                except Exception as e:
+                    data['product_image'] = False
+            else:
+                data['product_image'] = False
+
+            data['customer_ref'] = bom_line.customer_ref or ''
 
 
         # -------------------------------
@@ -137,32 +165,47 @@ class ReportBomStructureBranch(models.AbstractModel):
 
         data['display_free_to_use'] = True
         if component_rec:
+            data['cfe_quantity'] = component_rec.cfe_quantity
+            data['has_cfe_quantity'] = bool(component_rec.cfe_quantity)
+            data['bom_line_id'] = component_rec.id
+            data['approval_1'] = component_rec.approval_1
+            data['approval_2'] = component_rec.approval_2
+            child_bom = self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal')
+            data['cfe_editable'] = True
+            data['approval_1_editable'] = True
+            data['approval_2_editable'] = True
+            data['mo_internal_ref_editable'] = True
+            user = self.env.user
+            can_edit_approval_2 = user.has_group('mrp.group_mrp_manager') or user.has_group(
+                'purchase.group_purchase_manager')
+            data['can_edit_approval_2'] = can_edit_approval_2
+
+
+            main_vendor_line = bom_line.product_id.product_tmpl_id.seller_ids.filtered(lambda s: s.main_vendor)
+
+            available_manufacturers = []
+            for vendor in main_vendor_line:
+                for manufacturer in vendor.manufacturer_ids:
+                    available_manufacturers.append({
+                        'id': manufacturer.id,
+                        'ref': manufacturer.manufacture_internal_ref,  # or name if you want
+                        'name': manufacturer.manufacture_internal_ref,
+                    })
+
+            data['available_manufacturers'] = available_manufacturers
+
+            # Selected manufacturer
+            if component_rec.product_manufacturer_id:
+                data['product_manufacturer_id'] = component_rec.product_manufacturer_id.id
+            else:
+                data['product_manufacturer_id'] = False
+
+            # Editable flag
+            child_bom = self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal')
+            data['product_manufacturer_editable'] = not bool(child_bom)
             data['componentId'] = component_rec.id
             data['free_to_use'] = component_rec.free_to_use
 
-            # # Collect customer PO lines (exclude cancelled)
-            # if component_rec.customer_po_ids:
-            #     for po_line in component_rec.customer_po_ids:
-            #         if po_line.order_id.state != 'cancel':
-            #             po_ids.append(po_line.id)
-            #             po_names.append(po_line.order_id.name)
-            #
-            # # Collect vendor PO lines (exclude cancelled)
-            # if component_rec.vendor_po_ids:
-            #     for po_line in component_rec.vendor_po_ids:
-            #         if po_line.order_id.state != 'cancel':
-            #             po_ids.append(po_line.id)
-            #             po_names.append(po_line.order_id.name)
-            #
-            # data['po_line_id'] = po_ids or False
-            # data['po_line_name'] = ", ".join(po_names) if po_names else ""
-            # # After collecting po_names
-            # po_order_ids = list(set([po_line.order_id.id for po_line in
-            #                          component_rec.customer_po_ids.filtered(lambda l: l.order_id.state != 'cancel')] +
-            #                         [po_line.order_id.id for po_line in
-            #                          component_rec.vendor_po_ids.filtered(lambda l: l.order_id.state != 'cancel')]))
-            #
-            # data['po_order_ids'] = po_order_ids or False
 
             # In _get_component_data method, replace the PO handling section:
 
@@ -198,40 +241,64 @@ class ReportBomStructureBranch(models.AbstractModel):
             data['po_line_name'] = ", ".join([po['name'] for po in unique_po_data]) if unique_po_data else ""
 
 
-        data['purchase_group_editable'] = bom_line.approval_1 and bom_line.approval_2
-        is_approval = bom_line.approval_1 and bom_line.approval_2
+            data['purchase_group_editable'] = component_rec.approval_1 and component_rec.approval_2
+            is_approval = component_rec.approval_1 and component_rec.approval_2
 
-        # After: if not root_bom.is_evr: return data
+            # After: if not root_bom.is_evr: return data
 
-        # Check if product has a main vendor
-        product = bom_line.product_id if bom_line else parent_product
-        main_vendor = product.seller_ids.filtered(lambda s: s.main_vendor) if product else False
-        # data['has_main_vendor'] = bool(main_vendor)
+            # Check if product has a main vendor
+            product = bom_line.product_id if bom_line else parent_product
+            main_vendor = product.seller_ids.filtered(lambda s: s.main_vendor) if product else False
+            # data['has_main_vendor'] = bool(main_vendor)
 
-        if is_approval and component_rec:
-            data['to_order'] = component_rec.to_order
-            data['to_order_cfe'] = component_rec.to_order_cfe
-            data['ordered'] = component_rec.ordered
-            data['ordered_cfe'] = component_rec.ordered_cfe
-            data['to_transfer'] = component_rec.to_transfer
-            data['to_transfer_cfe'] = component_rec.to_transfer_cfe
-            data['transferred'] = component_rec.transferred
-            data['transferred_cfe'] = component_rec.transferred_cfe
-            data['used'] = component_rec.used
+            if is_approval and component_rec:
+                data['to_order'] = component_rec.to_order
+                data['to_order_cfe'] = component_rec.to_order_cfe
+                data['ordered'] = component_rec.ordered
+                data['ordered_cfe'] = component_rec.ordered_cfe
+                data['to_transfer'] = component_rec.to_transfer
+                data['to_transfer_cfe'] = component_rec.to_transfer_cfe
+                data['transferred'] = component_rec.transferred
+                data['transferred_cfe'] = component_rec.transferred_cfe
+                data['used'] = component_rec.used
 
+            else:
+                data['to_order'] = None
+                data['to_order_cfe'] = None
+                data['ordered'] = None
+                data['ordered_cfe'] = None
+                data['to_transfer'] = None
+                data['to_transfer_cfe'] = None
+                data['transferred'] = None
+                data['transferred_cfe'] = None
+                data['used'] = None
         else:
-            data['to_order'] = None
-            data['to_order_cfe'] = None
-            data['ordered'] = None
-            data['ordered_cfe'] = None
-            data['to_transfer'] = None
-            data['to_transfer_cfe'] = None
-            data['transferred'] = None
-            data['transferred_cfe'] = None
-            data['used'] = None
+            data.update({
+                'cfe_quantity': '',
+                'has_cfe_quantity': False,
+                'cfe_editable': False,
+                'bom_line_id': False,
+                'approval_1': False,
+                'approval_2': False,
+                'approval_1_editable': False,
+                'approval_2_editable': False,
+                'available_vendors': [],
+                'mo_internal_ref': False,
+                'can_edit_approval_2': False,
+            })
 
-
+        data['is_evr'] = bool(root_bom and root_bom.is_evr)
+        data['root_bom_id'] = root_bom_id
         return data
+
+
+    def _get_report_data(self, bom_id, searchQty=0, searchVariant=False):
+        # Set root BOM context for the entire report
+        self = self.with_context(root_bom_id=bom_id)
+        result = super()._get_report_data(bom_id, searchQty, searchVariant)
+        bom = self.env['mrp.bom'].browse(bom_id)
+        result['is_evr'] = bom.is_evr
+        return result
 
     def _get_component_for_line(self, root_bom_id, bom_line, parent_bom, index):
         Component = self.env["mrp.bom.line.branch.components"]

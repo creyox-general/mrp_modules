@@ -3,7 +3,7 @@
 {
     "name": "MRP BOM EVR Purchase Flow Automation",
     "summary": "Automated purchase and transfer flow for EVR BOMs",
-    "version": "18.0.0.13",
+    "version": "18.0.0.14",
     "category": "Manufacturing",
     "license": "LGPL-3",
     "author": "Creyox Technologies",

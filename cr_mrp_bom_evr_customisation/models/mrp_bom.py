@@ -851,85 +851,85 @@ class MrpBom(models.Model):
 
         return branch
 
-    def _assign_branches_for_new_lines(self, new_line_ids):
-        """
-        Assign branches only for new lines without deleting existing branches.
-        """
-        Branch = self.env['mrp.bom.line.branch']
-        Component = self.env['mrp.bom.line.branch.components']
-        codes = _generate_branch_codes()
-
-        for root_bom in self:
-            if not root_bom.cfe_project_location_id:
-                continue
-
-            # Get existing branches to know which codes are used
-            existing_branches = Branch.search([('bom_id', '=', root_bom.id)], order='sequence')
-            used_codes = set(existing_branches.mapped('branch_name'))
-
-            # Find next available index
-            idx = len(existing_branches)
-
-            root_location_id = root_bom.cfe_project_location_id.id
-
-            # Process only new lines
-            new_lines = self.env['mrp.bom.line'].browse(new_line_ids)
-
-            for line in new_lines:
-                if not line.child_bom_id:
-                    # Create component for leaf line
-                    comp = Component.create({
-                        'root_bom_id': root_bom.id,
-                        'bom_id': root_bom.id,
-                        'cr_bom_line_id': line.id,
-                        'is_direct_component': True,
-                        'location_id': root_location_id,
-                    })
-                    continue
-
-                # Line has child BOM - create branch
-                if idx >= len(codes):
-                    raise UserError("No more branch codes available.")
-
-                code = codes[idx]
-                idx += 1
-
-                path_uid = uuid.uuid4().hex
-
-                # Create location as sublocation
-                loc = self.env['stock.location'].create({
-                    'name': code,
-                    'location_id': root_location_id,
-                    'usage': 'internal',
-                })
-
-                # Create branch
-                branch = Branch.create({
-                    'bom_id': root_bom.id,
-                    'bom_line_id': line.id,
-                    'branch_name': code,
-                    'sequence': idx,
-                    'path_uid': path_uid,
-                    'location_id': loc.id,
-                })
-
-                child_bom = line.child_bom_id
-
-                # Create components for leaf lines in child BOM
-                if child_bom:
-                    leaf_lines = child_bom.bom_line_ids.filtered(lambda l: not l.child_bom_id)
-
-                    for child_line in leaf_lines:
-                        comp = Component.create({
-                            'bom_line_branch_id': branch.id,
-                            'root_bom_id': root_bom.id,
-                            'bom_id': child_bom.id,
-                            'cr_bom_line_id': child_line.id,
-                            'location_id': loc.id,
-                            'is_direct_component': False,
-                        })
-
-        return True
+    # def _assign_branches_for_new_lines(self, new_line_ids):
+    #     """
+    #     Assign branches only for new lines without deleting existing branches.
+    #     """
+    #     Branch = self.env['mrp.bom.line.branch']
+    #     Component = self.env['mrp.bom.line.branch.components']
+    #     codes = _generate_branch_codes()
+    #
+    #     for root_bom in self:
+    #         if not root_bom.cfe_project_location_id:
+    #             continue
+    #
+    #         # Get existing branches to know which codes are used
+    #         existing_branches = Branch.search([('bom_id', '=', root_bom.id)], order='sequence')
+    #         used_codes = set(existing_branches.mapped('branch_name'))
+    #
+    #         # Find next available index
+    #         idx = len(existing_branches)
+    #
+    #         root_location_id = root_bom.cfe_project_location_id.id
+    #
+    #         # Process only new lines
+    #         new_lines = self.env['mrp.bom.line'].browse(new_line_ids)
+    #
+    #         for line in new_lines:
+    #             if not line.child_bom_id:
+    #                 # Create component for leaf line
+    #                 comp = Component.create({
+    #                     'root_bom_id': root_bom.id,
+    #                     'bom_id': root_bom.id,
+    #                     'cr_bom_line_id': line.id,
+    #                     'is_direct_component': True,
+    #                     'location_id': root_location_id,
+    #                 })
+    #                 continue
+    #
+    #             # Line has child BOM - create branch
+    #             if idx >= len(codes):
+    #                 raise UserError("No more branch codes available.")
+    #
+    #             code = codes[idx]
+    #             idx += 1
+    #
+    #             path_uid = uuid.uuid4().hex
+    #
+    #             # Create location as sublocation
+    #             loc = self.env['stock.location'].create({
+    #                 'name': code,
+    #                 'location_id': root_location_id,
+    #                 'usage': 'internal',
+    #             })
+    #
+    #             # Create branch
+    #             branch = Branch.create({
+    #                 'bom_id': root_bom.id,
+    #                 'bom_line_id': line.id,
+    #                 'branch_name': code,
+    #                 'sequence': idx,
+    #                 'path_uid': path_uid,
+    #                 'location_id': loc.id,
+    #             })
+    #
+    #             child_bom = line.child_bom_id
+    #
+    #             # Create components for leaf lines in child BOM
+    #             if child_bom:
+    #                 leaf_lines = child_bom.bom_line_ids.filtered(lambda l: not l.child_bom_id)
+    #
+    #                 for child_line in leaf_lines:
+    #                     comp = Component.create({
+    #                         'bom_line_branch_id': branch.id,
+    #                         'root_bom_id': root_bom.id,
+    #                         'bom_id': child_bom.id,
+    #                         'cr_bom_line_id': child_line.id,
+    #                         'location_id': loc.id,
+    #                         'is_direct_component': False,
+    #                     })
+    #
+    #     return True
 
     def _check_and_assign_missing_branches_components(self, line, root_bom):
         """

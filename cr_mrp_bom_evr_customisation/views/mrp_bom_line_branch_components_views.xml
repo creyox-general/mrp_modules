@@ -38,6 +38,22 @@
                             <field name="is_direct_component"/>
                             <field name="customer_po_ids"/>
                             <field name="vendor_po_ids"/>
+
+                            <field name="show_cfe_quantity" invisible="1"/>
+                            <field name="cfe_quantity"
+                                   string="CFE Quantity"
+                                   placeholder="Customer supplied quantity"
+                                   invisible="[('show_cfe_quantity', '=', False)]"/>
+                            <field name="quantity"/>
+                            <field name="approval_1" invisible="1"/>
+                            <field name="approval_2" invisible="1"/>
+                            <field name="show_approval_1" invisible="1"/>
+                            <field name="show_approval_2" invisible="1"/>
+                            <field name="mo_internal_ref" invisible="1"/>
+                            <field name="show_mo_internal_ref" invisible="1"/>
+                            <field name="product_manufacturer_id"/>
+                            <field name="can_edit_approval_2"/>
+
                         </group>
 
                         <group string="Quantities">
@@ -59,18 +75,18 @@
     </record>
 
     <record id="view_mrp_bom_line_branch_components_search" model="ir.ui.view">
-    <field name="name">mrp.bom.line.branch.components.search</field>
-    <field name="model">mrp.bom.line.branch.components</field>
-    <field name="arch" type="xml">
-        <search>
-            <field name="root_bom_id"/>
+        <field name="name">mrp.bom.line.branch.components.search</field>
+        <field name="model">mrp.bom.line.branch.components</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="root_bom_id"/>
 
-            <filter name="group_by_root_bom_id"
-                    string="Root BOM"
-                    context="{'group_by': 'root_bom_id'}"/>
-        </search>
-    </field>
-</record>
+                <filter name="group_by_root_bom_id"
+                        string="Root BOM"
+                        context="{'group_by': 'root_bom_id'}"/>
+            </search>
+        </field>
+    </record>
 
 
     <!-- ========================================================= -->

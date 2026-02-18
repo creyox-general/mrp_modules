@@ -32,7 +32,7 @@ class MrpBomLineBranchComponents(models.Model):
                 existing_line.product_qty = quantity
                 self.customer_po_ids = [(4, existing_line.id)]
 
-            self.cr_bom_line_id.customer_po_line_id = POLine.id
+            # self.cr_bom_line_id.customer_po_line_id = POLine.id
 
             self._send_notification(
                 "Purchase Order Updated (CFE)",
@@ -80,7 +80,7 @@ class MrpBomLineBranchComponents(models.Model):
 
             find_cpo_line = self.env["purchase.order.line"].sudo().search(
                 [('product_id', '=', self.cr_bom_line_id.product_id.id), ('order_id', '=', po.id),('component_branch_id','=',self.id)])
-            self.cr_bom_line_id.customer_po_line_id = find_cpo_line.id
+            # self.cr_bom_line_id.customer_po_line_id = find_cpo_line.id
             self.customer_po_ids = [(4, find_cpo_line.id)]
             find_cpo_line.order_id.po_type = 'mrp'
 
@@ -122,13 +122,13 @@ class MrpBomLineBranchComponents(models.Model):
         if existing_line:
             # Update existing line
             existing_line.order_id.po_type = 'mrp'
-            existing_line.manufacturer_id = bom_line.product_manufacturer_id.id
+            existing_line.manufacturer_id = self.product_manufacturer_id.id
             self.vendor_po_ids = [(4, existing_line.id)]
             if existing_line.product_qty != quantity:
                 existing_line.product_qty = quantity
                 _logger.info("Updated existing PO line qty to %s", quantity)
 
-            self.cr_bom_line_id.po_line_id = POLine.id
+            # self.cr_bom_line_id.po_line_id = POLine.id
             self._send_notification(
                 "Purchase Order Updated (Non - CFE)",
                 f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
@@ -171,7 +171,7 @@ class MrpBomLineBranchComponents(models.Model):
                 "bom_line_ids": [(6, 0, [bom_line.id])],
                 "bom_id": self.root_bom_id.id,
                 "project_id": self.root_bom_id.project_id.id,
-                "manufacturer_id": bom_line.product_manufacturer_id.id,
+                "manufacturer_id": self.product_manufacturer_id.id,
             })
             _logger.info("Created new PO line: %s qty=%s", new_line.id, quantity)
 
@@ -183,7 +183,7 @@ class MrpBomLineBranchComponents(models.Model):
                 ('component_branch_id', '=', self.id)
             ])
             find_vpo_line.order_id.po_type = 'mrp'
-            self.cr_bom_line_id.po_line_id = find_vpo_line.id
+            # self.cr_bom_line_id.po_line_id = find_vpo_line.id
             self.vendor_po_ids = [(4, find_vpo_line.id)]
             _logger.info("Linked new PO line %s to component branch %s", find_vpo_line.id, self.id)
 

@@ -150,16 +150,13 @@ class MrpBomLine(models.Model):
         if not bom_line:
             return
 
+        if self.used > 0:
+            return
+
         if self.bom_line_branch_id and self.bom_line_branch_id.transferred > 0:
-            self.to_order = 0
-            self.to_order_cfe = 0
-            self.ordered = 0
-            self.ordered_cfe = 0
-            self.to_transfer = 0
-            self.to_transfer_cfe = 0
-            self.transferred = 0
-            self.transferred_cfe = 0
-            self.used = 0
+            return
+
+        if self.bom_line_branch_id and self.bom_line_branch_id.used > 0:
             return
 
         # Skip if BUY/MAKE product without selection
@@ -172,10 +169,10 @@ class MrpBomLine(models.Model):
         #     return
 
         # Check if approvals are TRUE
-        if not (bom_line.approval_1 and bom_line.approval_2):
+        if not (self.approval_1 and self.approval_2):
             return
 
-        if bom_line.cfe_quantity != self.transferred_cfe:
+        if self.cfe_quantity != self.transferred_cfe:
             self._process_cfe_flow()
 
         if bom_line.product_qty != self.transferred:

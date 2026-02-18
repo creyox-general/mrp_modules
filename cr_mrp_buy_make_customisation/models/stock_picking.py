@@ -123,8 +123,8 @@ class StockPicking(models.Model):
         )
 
     def _handle_pick_components(self, picking, mo):
-        if not mo.branch_mapping_id:
-            return
+        # if not mo.branch_mapping_id:
+        #     return
 
         ComponentModel = self.env['mrp.bom.line.branch.components']
         BranchModel = self.env['mrp.bom.line.branch']
@@ -135,28 +135,49 @@ class StockPicking(models.Model):
         ):
             # 1️⃣ Update Component
             component = ComponentModel.search([
+                ('is_direct_component', '=', False),
                 ('bom_line_branch_id', '=', mo.branch_mapping_id.id),
-                ('cr_bom_line_id.product_id', '=', move.product_id.id)
+                ('cr_bom_line_id.product_id', '=', move.product_id.id),
+                ('root_bom_id','=',mo.root_bom_id.id)
             ], limit=1)
 
             if component:
-                component.write({'used': move.quantity})
+                component.write({'used': move.quantity, 'transferred': 0,
+                'transferred_cfe': 0,})
                 self._update_child_mo_usage(mo, move, MrpModel)
                 continue
 
             # 2️⃣ Fallback Branch Update
             if mo.branch_intermediate_location_id:
-                branches = BranchModel.search([
-                    ('bom_id', '=', mo.root_bom_id.id),
-                    ('used', '=', 0)
-                ])
+                if  mo.bom_id.id == mo.root_bom_id.id:
+                    branches = BranchModel.search([
+                        ('bom_id', '=', mo.root_bom_id.id),
+                        ('used', '=',0)
+                    ])
 
-                matching_branch = branches.filtered(
-                    lambda b: b.bom_line_id.product_id == move.product_id
-                )
+                    matching_branch = branches.filtered(
+                        lambda b: b.bom_line_id.product_id == move.product_id
+                    )
 
-                if matching_branch:
-                    matching_branch.write({'used': move.quantity})
+                    if matching_branch:
+                        matching_branch.write({'used': move.quantity,'transferred': 0,})
+                else:
+                    self._update_child_mo_usage(mo, move, MrpModel)
+
+            print('is ? : ',not mo.branch_mapping_id)
+            if not mo.branch_mapping_id:
+                print('yes...')
+                component = ComponentModel.search([
+                    ('is_direct_component', '=', True),
+                    ('root_bom_id','=',mo.root_bom_id.id),
+                    ('cr_bom_line_id.product_id', '=', move.product_id.id)
+                ], limit=1)
+                print('component : ',component)
+
+                if component:
+                    component.write({'used': move.quantity, 'transferred': 0,
+                                     'transferred_cfe': 0, })
+
 
     def _update_child_mo_usage(self, mo, move, MrpModel):
         child_mo = MrpModel.search(
@@ -196,24 +217,34 @@ class StockPicking(models.Model):
                 'to_transfer_cfe': 0,
                 'transferred': 0,
                 'transferred_cfe': 0,
-                'used': 0,
             })
 
     def reset_values(self, picking, mo):
         # Run logic only for root MO
         if (
-                self.bom_id
-                and self.root_bom_id
-                and self.bom_id.id == self.root_bom_id.id
+                mo.bom_id
+                and mo.root_bom_id
+                and mo.bom_id.id == mo.root_bom_id.id
         ):
             branches = self.env['mrp.bom.line.branch'].search([
-                ('bom_id', '=', self.bom_id.id)
+                ('bom_id', '=', mo.bom_id.id)
             ])
 
             for branch in branches:
                 branch.write({
                     'transferred': 0,
                     'used': 0,
+                })
+
+            components = self.env['mrp.bom.line.branch.components'].search([
+                ('root_bom_id', '=', mo.root_bom_id.id),
+            ])
+
+            for component in components:
+                component.write({
+                    'used': 0,
+                    'transferred': 0,
+                    'transferred_cfe': 0,
                 })
 
 
@@ -306,13 +337,11 @@ class StockPicking(models.Model):
                 if mo and mo.cr_final_location_id:
                     vals['location_dest_id'] = mo.cr_final_location_id.id
 
-        print('1 vals : ',vals)
         # Now call super AFTER custom logic
         picking = super(StockPicking, self.with_context(
             bypass_custom_internal_transfer_restrictions=True
         )).create(vals)
 
-        print('2 vals : ', vals)
         return picking
 
 

@@ -62,6 +62,9 @@ class ReportBomStructureBranch(models.AbstractModel):
                     data['has_cfe_quantity'] = bool(component_rec.cfe_quantity)
                     data['approval_1'] = component_rec.approval_1
                     data['approval_2'] = component_rec.approval_2
+                    data['approve_to_manufacture'] = component_rec.bom_line_branch_id.approve_to_manufacture
+                    data['bom_line_id'] = bom_line.id
+                    data['display_name'] = bom_line.product_id.display_name
 
                     user = self.env.user
                     can_edit_approval_2 = user.has_group('mrp.group_mrp_manager') or user.has_group(
@@ -221,7 +224,7 @@ class ReportBomStructureBranch(models.AbstractModel):
 
                 if branch and branch.branch_name:
                     data['approve_to_manufacture_editable'] = True
-                    data['approve_to_manufacture'] = bom_line.approve_to_manufacture
+                    data['approve_to_manufacture'] = branch.approve_to_manufacture
                     data['display_free_to_use'] = True
                     data['customer_ref_editable'] = True
                     data["free_to_use"] = branch.free_to_use
@@ -283,6 +286,7 @@ class ReportBomStructureBranch(models.AbstractModel):
         # -------------------------------
         child_bom = self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal')
         data['customer_ref_editable'] = not bool(child_bom)
+
 
         component_rec = self._get_component_for_line(root_bom_id, bom_line, parent_bom, index)
 
@@ -347,6 +351,10 @@ class ReportBomStructureBranch(models.AbstractModel):
 
             if component_rec:
                 data['lost'] = component_rec.lost
+                # data['approve_to_manufacture_editable'] = True
+                data['approve_to_manufacture'] = component_rec.bom_line_branch_id.approve_to_manufacture
+                data['bom_line_id'] = bom_line.id
+                data['display_name'] = bom_line.product_id.display_name
             else:
                 data['lost'] = 0.0
 

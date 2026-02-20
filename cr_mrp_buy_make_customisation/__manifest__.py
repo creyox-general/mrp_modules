@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'MRP Buy/Make Customisation',
-    'version': '18.0.6.0.0',
+    'version': '18.0.7.0.0',
     'category': 'Manufacturing',
     'summary': 'Add Buy/Make selection in BOM overview for products',
     'description': """
@@ -21,7 +21,6 @@
         'views/product_template_views.xml',
         'views/mrp_bom_views.xml',
         'views/mrp_production_views.xml',
-        'views/mrp_bom_line_branch_views.xml',
         'views/mrp_bom_line_branch_components_views.xml',
     ],
     'assets': {

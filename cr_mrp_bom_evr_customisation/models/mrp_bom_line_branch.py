@@ -29,6 +29,11 @@ class MrpBomLineBranch(models.Model):
     )
     transferred = fields.Float(string='Transferred', default=0.0)
     used = fields.Float(string='Used', default=0.0)
+    approve_to_manufacture = fields.Boolean(
+        string='Approve to Manufacture',
+        default=False,
+        help="If checked, MO will be confirm for this BOM line"
+    )
 
     _sql_constraints = [
         ('bom_branch_unique', 'unique(bom_id, branch_name)', 'Branch name must be unique per BOM.'),
@@ -145,5 +150,78 @@ class MrpBomLineBranch(models.Model):
 
         # No free location found in the entire parent chain
         return False
+
+
+    def action_toggle_approve_to_manufacture(self, approve):
+        self.ensure_one()
+        root_bom = self.env.context.get('root_bom_id')
+        line = self.env.context.get('line')
+
+        if not approve:
+            self.approve_to_manufacture = False
+            return {
+                "success": True,
+                "message": "Approval removed."
+            }
+
+        if not root_bom:
+            return {
+                "success": False,
+                "message": "Root BOM not found in context."
+            }
+
+
+        # Find Parent MO
+        parent_mos = self.env['mrp.production'].search([
+            ('root_bom_id', '=', root_bom),
+            ('line', '=', line),
+            ('state', '=', 'draft'),
+            ('branch_mapping_id','=',self.id)
+        ])
+
+        if not parent_mos:
+            return {
+                "success": False,
+                "message": "No parent MO found for this BOM line."
+            }
+
+        for parent_mo in parent_mos:
+            child_mos = self.env['mrp.production'].search([
+                ('parent_mo_id', '=', parent_mo.id)
+            ])
+
+            # If no child MOs → allow confirm
+            if not child_mos:
+                if approve:
+                    self.approve_to_manufacture = True
+                    parent_mo.action_confirm()
+                    return {
+                        "success": True,
+                        "message": f"Parent MO {parent_mo.name} confirmed (no child MOs)."
+                    }
+
+            # Validate children approval
+            not_ready = child_mos.filtered(lambda mo: mo.state == 'draft')
+
+            if not_ready:
+                return {
+                    "success": False,
+                    "message": "Some child Manufacturing Orders are not approved yet."
+                }
+
+            # ✅ All Approved
+            if approve:
+                self.approve_to_manufacture = True
+                parent_mo.action_confirm()
+
+                return {
+                    "success": True,
+                    "message": f"Parent MO {parent_mo.name} auto-confirmed."
+                }
+
+        return {
+            "success": False,
+            "message": "Unexpected condition reached."
+        }
 
 

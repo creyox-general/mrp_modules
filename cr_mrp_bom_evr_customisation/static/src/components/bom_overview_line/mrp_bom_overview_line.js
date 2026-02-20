@@ -241,17 +241,23 @@ openImageModal(productId, productName) {
     },
     async onApproveToManufactureChange(event) {
         const rootBomId = this.props.data.root_bom_id;
+        console.log('rootBomId : ',rootBomId)
+        console.log('this.props.data.branch_id : ',this.props.data.branch_id)
+        const branch = this.props.data.branch_id;
+        console.log('branch : ',branch)
         const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
+        console.log('bomLineId : ',bomLineId)
         const isChecked = event.target.checked;
+        console.log('isChecked : ',isChecked)
 
-        if (!bomLineId) return;
+        if (!branch) return;
 
         try {
             const result = await this.ormService.call(
-                "mrp.bom.line",
+                "mrp.bom.line.branch",
                 "action_toggle_approve_to_manufacture",
-                [[bomLineId], isChecked],
-                { context: { root_bom_id: rootBomId } }
+                [[branch], isChecked],
+                { context: { root_bom_id: rootBomId ,line: bomLineId} }
             );
 
             if (result.success) {

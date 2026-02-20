@@ -5,32 +5,6 @@ from odoo import models,api,fields
 class MrpBomLineBranch(models.Model):
     _inherit = "mrp.bom.line.branch"
 
-    critical = fields.Boolean(
-        string='Critical',
-        compute='_compute_critical',
-        store=True,
-        help='Branch is critical if BOM line is critical or MO contains critical components'
-    )
-
-    @api.depends(
-        'bom_line_id.critical',
-        'bom_line_id.approve_to_manufacture',
-    )
-    def _compute_critical(self):
-        """
-        Branch is critical if:
-        1. The BOM line is marked as critical, OR
-        2. approve_to_manufacture is True AND the MO contains critical components
-        """
-        for branch in self:
-            # if branch.bom_line_id.critical:
-            #     branch.critical = True
-            # elif branch.bom_line_id.approve_to_manufacture and branch.mo_id:
-            #     branch.critical = branch.mo_id.critical
-            # else:
-            #     branch.critical = False
-            branch.critical = False
-
     def _should_consider_location(self, location, bom_line=None):
         """
         Override to include TAPY locations for MECH category products.

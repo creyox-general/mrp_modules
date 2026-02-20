@@ -27,12 +27,6 @@ class MrpBom(models.Model):
     _inherit = 'mrp.bom'
 
 
-    # def _should_treat_as_component(self, bom_line):
-    #     """Check if BOM line should be treated as normal component despite having child BOM"""
-    #     return (bom_line.child_bom_id and
-    #             bom_line.product_id.manufacture_purchase == 'buy_make' and
-    #             bom_line.buy_make_selection == 'buy')
-
     def _should_treat_as_component(self, bom_line):
         """Check if BOM line should be treated as normal component despite having child BOM"""
         return (
@@ -47,7 +41,6 @@ class MrpBom(models.Model):
 
     def _assign_branches_for_bom(self):
         """Assign branch codes - treat BUY-selected lines as components"""
-        print('yes in assign branch...')
         Branch = self.env['mrp.bom.line.branch']
         Component = self.env['mrp.bom.line.branch.components']
         codes = _generate_branch_codes()
@@ -191,7 +184,6 @@ class MrpBom(models.Model):
         1. Components: WH/Stock → Virtual/Production
         2. Finished Product: Virtual/Production → Own Branch Location → Parent Branch Location
         """
-        print('yyyyyyy in recursion')
         Branch = self.env['mrp.bom.line.branch']
 
         # Get specific line to create MO for (if called from write)
@@ -269,8 +261,6 @@ class MrpBom(models.Model):
             ], limit=1)
 
             if existing_mo:
-                print('existing_mo : ',existing_mo)
-                print('current_branch_location : ',current_branch_location)
                 x = existing_mo.write({
                     'product_id': child_bom.product_tmpl_id.product_variant_id.id,
                     'product_uom_id': child_bom.product_uom_id.id,
@@ -285,16 +275,9 @@ class MrpBom(models.Model):
                     'branch_mapping_id': branch_rec.id if branch_rec else False,
                     'branch_intermediate_location_id': current_branch_location
                 })
-                print('x ; :',x)
-
-            # if existing_mo:
-            #     _logger.info(f"MO {existing_mo.name} already exists for line {line.id}, skipping creation")
-            #     # Just continue to next line, don't break
-            #     continue
 
 
             if not existing_mo:
-                print('root_bom_id : ',root_bom)
                 mo_vals = {
                     'product_id': child_bom.product_tmpl_id.product_variant_id.id,
                     'product_uom_id': child_bom.product_uom_id.id,
@@ -318,9 +301,6 @@ class MrpBom(models.Model):
                 ).create(mo_vals)
 
                 created_mo = mo
-
-                print('============= created_mo : ',created_mo)
-                print('============= created_mo.root_bom_id : ', created_mo.root_bom_id)
 
                 if created_mo.root_bom_id.id != root_bom.id:
                     created_mo.root_bom_id = root_bom.id
@@ -365,17 +345,6 @@ class MrpBom(models.Model):
                     parent_branch_location=current_branch_location
                 )
 
-                # Don't recurse into child BOM if we're only creating for specific line
-                # if not create_only_for_line:
-                #     # Recurse: pass current branch location as parent for children
-                #     child_bom.action_create_child_mos_recursive(
-                #         root_bom=root_bom,
-                #         parent_mo=mo,
-                #         index=line_index,
-                #         level=level + 1,
-                #         parent_qty=child_qty,
-                #         parent_branch_location=current_branch_location
-                #     )
             else:
 
                 # Pass the SAME list reference through context
@@ -513,245 +482,21 @@ class MrpBom(models.Model):
         )
 
 
-    # def _check_and_create_missing_mos(self, line, root_bom, parent_mo=None, parent_qty=1.0,
-    #                                   parent_branch_location=None):
-    #     """
-    #     Recursively check if MOs exist for a line and all its children.
-    #     Create missing MOs for entire hierarchy.
-    #     """
-    #     if not line.child_bom_id:
-    #         return
-    #
-    #     child_bom = line.child_bom_id
-    #     child_qty = float(line.product_qty or 1.0) * parent_qty
-    #
-    #     product_variant = child_bom.product_tmpl_id.product_variant_id
-    #     if product_variant.manufacture_purchase == 'buy':
-    #         return
-    #
-    #     # Check if MO exists for this line
-    #     existing_mo = self.env['mrp.production'].search([
-    #         ('root_bom_id', '=', root_bom.id),
-    #         ('line', '=', str(line.id)),
-    #         ('bom_id', '=', child_bom.id),
-    #         ('state', '=', 'draft')
-    #     ], limit=1)
-    #
-    #     current_mo = existing_mo
-    #     current_branch_location = parent_branch_location
-    #
-    #     if not existing_mo:
-    #         # Get branch for this line to determine locations
-    #         Branch = self.env['mrp.bom.line.branch']
-    #         branches = Branch.search([
-    #             ('bom_id', '=', root_bom.id),
-    #             ('bom_line_id', '=', line.id)
-    #         ], order='sequence', limit=1)
-    #
-    #         if branches and branches.location_id:
-    #             current_branch_location = branches.location_id.id
-    #
-    #         final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
-    #
-    #         # Get warehouse location
-    #         warehouse = self.env['stock.warehouse'].search([('company_id', '=', self.env.company.id)], limit=1)
-    #         stock_location = warehouse.lot_stock_id if warehouse else False
-    #
-    #         # Create MO for this line
-    #         _logger.info(f"Creating missing MO for line {line.id} (product: {line.product_id.display_name})")
-    #
-    #         mo_vals = {
-    #             'product_id': child_bom.product_tmpl_id.product_variant_id.id,
-    #             'product_uom_id': child_bom.product_uom_id.id,
-    #             'product_qty': child_qty,
-    #             'bom_id': child_bom.id,
-    #             'root_bom_id': root_bom.id,
-    #             'parent_mo_id': parent_mo.id if parent_mo else False,
-    #             'project_id': root_bom.project_id.id,
-    #             'line': line.id,
-    #             'cr_final_location_id': final_dest_location if final_dest_location else False,
-    #             'branch_mapping_id': branches.id if branches else False,
-    #             # 'location_src_id': stock_location.id if stock_location else False,
-    #             # 'location_dest_id': final_dest_location if final_dest_location else False,
-    #             'state': 'draft',
-    #         }
-    #
-    #         current_mo = self.env['mrp.production'].with_context(
-    #             branch_intermediate_location=current_branch_location,
-    #             branch_final_location=final_dest_location,
-    #             skip_component_moves=True
-    #         ).create(mo_vals)
-    #
-    #         print('current_mo : ',current_mo)
-    #
-    #         # Send notification
-    #         branch_name = branches.branch_name if branches else "N/A"
-    #         src_name = stock_location.display_name if stock_location else "WH/Stock"
-    #         intermediate_name = self.env['stock.location'].browse(
-    #             current_branch_location).display_name if current_branch_location else "N/A"
-    #         final_name = self.env['stock.location'].browse(
-    #             final_dest_location).display_name if final_dest_location else "N/A"
-    #
-    #         self.env['bus.bus']._sendone(
-    #             self.env.user.partner_id,
-    #             "simple_notification",
-    #             {
-    #                 "title": "Manufacturing Order Created",
-    #                 "message": (
-    #                     f"MO {current_mo.name} created for {child_bom.display_name}\n"
-    #                     f"Branch: {branch_name}\n"
-    #                     f"Quantity: {child_qty}\n"
-    #                     f"Flow: {src_name} → {intermediate_name} → {final_name}"
-    #                 ),
-    #                 "sticky": False,
-    #                 "type": "info",
-    #             }
-    #         )
-    #
-    #     # IMPORTANT: Recursively check ALL child lines (whether MO existed or was just created)
-    #     for child_line in child_bom.bom_line_ids:
-    #         if child_line.child_bom_id:
-    #             # This child line also has a BOM, recursively create MOs for it
-    #             self._check_and_create_missing_mos(
-    #                 child_line,
-    #                 root_bom,
-    #                 current_mo,
-    #                 child_qty,
-    #                 current_branch_location
-    #             )
+    def _get_branch_location_for_line(self, line, root_bom):
+        """
+        Get branch location for a BOM line.
+        This ensures consistent location retrieval whether MO exists or not.
+        """
+        Branch = self.env['mrp.bom.line.branch']
+        branches = Branch.search([
+            ('bom_id', '=', root_bom.id),
+            ('bom_line_id', '=', line.id)
+        ], order='sequence', limit=1)
 
-    # def _get_branch_location_for_line(self, line, root_bom):
-    #     """
-    #     Get branch location for a BOM line.
-    #     This ensures consistent location retrieval whether MO exists or not.
-    #     """
-    #     Branch = self.env['mrp.bom.line.branch']
-    #     branches = Branch.search([
-    #         ('bom_id', '=', root_bom.id),
-    #         ('bom_line_id', '=', line.id)
-    #     ], order='sequence', limit=1)
-    #
-    #     if branches and branches.location_id:
-    #         return branches.location_id.id, branches
-    #     return None, None
-    #
-    # def _check_and_create_missing_mos(self, line, root_bom, parent_mo=None, parent_qty=1.0,
-    #                                   parent_branch_location=None):
-    #     """
-    #     Recursively check if MOs exist for a line and all its children.
-    #     Create missing MOs for entire hierarchy.
-    #     """
-    #     if not line.child_bom_id:
-    #         return
-    #
-    #     child_bom = line.child_bom_id
-    #     child_qty = float(line.product_qty or 1.0) * parent_qty
-    #
-    #     product_variant = child_bom.product_tmpl_id.product_variant_id
-    #     if product_variant.manufacture_purchase == 'buy':
-    #         return
-    #
-    #     # Check if MO exists for this line
-    #     existing_mo = self.env['mrp.production'].search([
-    #         ('root_bom_id', '=', root_bom.id),
-    #         ('line', '=', str(line.id)),
-    #         ('bom_id', '=', child_bom.id),
-    #         ('state', '=', 'draft')
-    #     ], limit=1)
-    #
-    #     current_mo = existing_mo
-    #     current_branch_location = parent_branch_location
-    #
-    #     if not existing_mo:
-    #         # Get branch for this line to determine locations
-    #         branch_location_id, branches = self._get_branch_location_for_line(line, root_bom)
-    #
-    #         if branch_location_id:
-    #             current_branch_location = branch_location_id
-    #
-    #         final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
-    #
-    #         # Get warehouse location
-    #         warehouse = self.env['stock.warehouse'].search([('company_id', '=', self.env.company.id)], limit=1)
-    #         stock_location = warehouse.lot_stock_id if warehouse else False
-    #
-    #         # Create MO for this line
-    #         _logger.info(f"Creating missing MO for line {line.id} (product: {line.product_id.display_name})")
-    #
-    #         mo_vals = {
-    #             'product_id': child_bom.product_tmpl_id.product_variant_id.id,
-    #             'product_uom_id': child_bom.product_uom_id.id,
-    #             'product_qty': child_qty,
-    #             'bom_id': child_bom.id,
-    #             'root_bom_id': root_bom.id,
-    #             'parent_mo_id': parent_mo.id if parent_mo else False,
-    #             'project_id': root_bom.project_id.id,
-    #             'line': line.id,
-    #             'cr_final_location_id': final_dest_location if final_dest_location else False,
-    #             'branch_mapping_id': branches.id if branches else False,
-    #             # 'location_src_id': stock_location.id if stock_location else False,
-    #             # 'location_dest_id': final_dest_location if final_dest_location else False,
-    #             'state': 'draft',
-    #         }
-    #
-    #         current_mo = self.env['mrp.production'].with_context(
-    #             branch_intermediate_location=current_branch_location,
-    #             branch_final_location=final_dest_location,
-    #             skip_component_moves=True
-    #         ).create(mo_vals)
-    #
-    #         print('current_mo : ', current_mo)
-    #
-    #         # Send notification
-    #         branch_name = branches.branch_name if branches else "N/A"
-    #         src_name = stock_location.display_name if stock_location else "WH/Stock"
-    #         intermediate_name = self.env['stock.location'].browse(
-    #             current_branch_location).display_name if current_branch_location else "N/A"
-    #         final_name = self.env['stock.location'].browse(
-    #             final_dest_location).display_name if final_dest_location else "N/A"
-    #
-    #         self.env['bus.bus']._sendone(
-    #             self.env.user.partner_id,
-    #             "simple_notification",
-    #             {
-    #                 "title": "Manufacturing Order Created",
-    #                 "message": (
-    #                     f"MO {current_mo.name} created for {child_bom.display_name}\n"
-    #                     f"Branch: {branch_name}\n"
-    #                     f"Quantity: {child_qty}\n"
-    #                     f"Flow: {src_name} → {intermediate_name} → {final_name}"
-    #                 ),
-    #                 "sticky": False,
-    #                 "type": "info",
-    #             }
-    #         )
-    #     else:
-    #         # ✅ FIX: When MO already exists, retrieve its actual branch location
-    #         _logger.info(f"MO already exists for line {line.id}: {existing_mo.name}")
-    #
-    #         # Option 1: Get from branch mapping (most reliable)
-    #         if existing_mo.branch_mapping_id and existing_mo.branch_mapping_id.location_id:
-    #             current_branch_location = existing_mo.branch_mapping_id.location_id.id
-    #         else:
-    #             # Option 2: Get from the line's branch configuration (fallback)
-    #             branch_location_id, _ = self._get_branch_location_for_line(line, root_bom)
-    #             if branch_location_id:
-    #                 current_branch_location = branch_location_id
-    #             # Option 3: Use stored location on MO if available (last fallback)
-    #             elif hasattr(existing_mo, 'cr_final_location_id') and existing_mo.cr_final_location_id:
-    #                 current_branch_location = existing_mo.cr_final_location_id
-    #
-    #     # IMPORTANT: Recursively check ALL child lines (whether MO existed or was just created)
-    #     for child_line in child_bom.bom_line_ids:
-    #         if child_line.child_bom_id:
-    #             # This child line also has a BOM, recursively create MOs for it
-    #             self._check_and_create_missing_mos(
-    #                 child_line,
-    #                 root_bom,
-    #                 current_mo,  # ✅ This is now correctly set (either new or existing MO)
-    #                 child_qty,
-    #                 current_branch_location  # ✅ This is now correctly retrieved from existing MO
-    #             )
+        if branches and branches.location_id:
+            return branches.location_id.id, branches
+        return None, None
+
 
     def _get_branch_location_for_line(self, line, root_bom):
         """
@@ -768,340 +513,6 @@ class MrpBom(models.Model):
             return branches.location_id.id, branches
         return None, None
 
-    # def _check_and_create_missing_mos(self, line, root_bom, parent_mo=None, parent_qty=1.0,
-    #                                   parent_branch_location=None):
-    #     """
-    #     Recursively check if MOs exist for a line and all its children.
-    #     Create missing MOs for entire hierarchy.
-    #     """
-    #     if not line.child_bom_id:
-    #         return
-    #
-    #     child_bom = line.child_bom_id
-    #     child_qty = float(line.product_qty or 1.0) * parent_qty
-    #
-    #     product_variant = child_bom.product_tmpl_id.product_variant_id
-    #     if product_variant.manufacture_purchase == 'buy':
-    #         return
-    #
-    #     # Check if MO exists for this line
-    #     existing_mo = self.env['mrp.production'].search([
-    #         ('root_bom_id', '=', root_bom.id),
-    #         ('line', '=', str(line.id)),
-    #         ('bom_id', '=', child_bom.id),
-    #         ('state', '=', 'draft')
-    #     ], limit=1)
-    #
-    #     current_mo = existing_mo
-    #     current_branch_location = parent_branch_location
-    #
-    #     if not existing_mo:
-    #         # Get branch for this line to determine locations
-    #         branch_location_id, branches = self._get_branch_location_for_line(line, root_bom)
-    #
-    #         if branch_location_id:
-    #             current_branch_location = branch_location_id
-    #
-    #         final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
-    #
-    #         # Get warehouse location
-    #         warehouse = self.env['stock.warehouse'].search([('company_id', '=', self.env.company.id)], limit=1)
-    #         stock_location = warehouse.lot_stock_id if warehouse else False
-    #
-    #         # Create MO for this line
-    #         _logger.info(f"Creating missing MO for line {line.id} (product: {line.product_id.display_name})")
-    #
-    #         mo_vals = {
-    #             'product_id': child_bom.product_tmpl_id.product_variant_id.id,
-    #             'product_uom_id': child_bom.product_uom_id.id,
-    #             'product_qty': child_qty,
-    #             'bom_id': child_bom.id,
-    #             'root_bom_id': root_bom.id,
-    #             'parent_mo_id': parent_mo.id if parent_mo else False,
-    #             'project_id': root_bom.project_id.id,
-    #             'line': line.id,
-    #             'cr_final_location_id': final_dest_location if final_dest_location else False,
-    #             'branch_mapping_id': branches.id if branches else False,
-    #             # 'location_src_id': stock_location.id if stock_location else False,
-    #             # 'location_dest_id': final_dest_location if final_dest_location else False,
-    #             'state': 'draft',
-    #         }
-    #
-    #         current_mo = self.env['mrp.production'].with_context(
-    #             branch_intermediate_location=current_branch_location,
-    #             branch_final_location=final_dest_location,
-    #             skip_component_moves=True
-    #         ).create(mo_vals)
-    #
-    #         print('current_mo : ', current_mo)
-    #
-    #         # Send notification
-    #         branch_name = branches.branch_name if branches else "N/A"
-    #         src_name = stock_location.display_name if stock_location else "WH/Stock"
-    #         intermediate_name = self.env['stock.location'].browse(
-    #             current_branch_location).display_name if current_branch_location else "N/A"
-    #         final_name = self.env['stock.location'].browse(
-    #             final_dest_location).display_name if final_dest_location else "N/A"
-    #
-    #         self.env['bus.bus']._sendone(
-    #             self.env.user.partner_id,
-    #             "simple_notification",
-    #             {
-    #                 "title": "Manufacturing Order Created",
-    #                 "message": (
-    #                     f"MO {current_mo.name} created for {child_bom.display_name}\n"
-    #                     f"Branch: {branch_name}\n"
-    #                     f"Quantity: {child_qty}\n"
-    #                     f"Flow: {src_name} → {intermediate_name} → {final_name}"
-    #                 ),
-    #                 "sticky": False,
-    #                 "type": "info",
-    #             }
-    #         )
-    #     else:
-    #         # ✅ FIX: When MO already exists, retrieve its actual branch location and update missing fields
-    #         _logger.info(f"MO already exists for line {line.id}: {existing_mo.name}")
-    #
-    #         # Get branch location and branch record for this line
-    #         branch_location_id, branches = self._get_branch_location_for_line(line, root_bom)
-    #
-    #         # Prepare update values for existing MO
-    #         update_vals = {}
-    #
-    #         # Update branch_mapping_id if missing or different
-    #         if branches:
-    #             if not existing_mo.branch_mapping_id or existing_mo.branch_mapping_id.id != branches.id:
-    #                 update_vals['branch_mapping_id'] = branches.id
-    #                 _logger.info(f"Updating branch_mapping_id for MO {existing_mo.name}")
-    #
-    #         # Update parent_mo_id if missing or different
-    #         parent_mo_id = parent_mo.id if parent_mo else False
-    #         if existing_mo.parent_mo_id.id if existing_mo.parent_mo_id else False != parent_mo_id:
-    #             update_vals['parent_mo_id'] = parent_mo_id
-    #             _logger.info(f"Updating parent_mo_id for MO {existing_mo.name}: {parent_mo_id}")
-    #
-    #         # Calculate final destination location
-    #         final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
-    #
-    #         # Update cr_final_location_id if missing or different
-    #         if not existing_mo.cr_final_location_id or existing_mo.cr_final_location_id != final_dest_location:
-    #             update_vals['cr_final_location_id'] = final_dest_location
-    #             _logger.info(f"Updating cr_final_location_id for MO {existing_mo.name}: {final_dest_location}")
-    #
-    #         # Write updates if any fields need to be updated
-    #         if update_vals:
-    #             existing_mo.write(update_vals)
-    #             _logger.info(f"Updated existing MO {existing_mo.name} with: {update_vals}")
-    #
-    #         # Set current_branch_location for recursive calls
-    #         # Option 1: Get from branch mapping (most reliable)
-    #         if existing_mo.branch_mapping_id and existing_mo.branch_mapping_id.location_id:
-    #             current_branch_location = existing_mo.branch_mapping_id.location_id.id
-    #         elif branch_location_id:
-    #             # Option 2: Get from the line's branch configuration (fallback)
-    #             current_branch_location = branch_location_id
-    #         elif hasattr(existing_mo, 'cr_final_location_id') and existing_mo.cr_final_location_id:
-    #             # Option 3: Use stored location on MO if available (last fallback)
-    #             current_branch_location = existing_mo.cr_final_location_id
-    #
-    #     # IMPORTANT: Recursively check ALL child lines (whether MO existed or was just created)
-    #     for child_line in child_bom.bom_line_ids:
-    #         if child_line.child_bom_id:
-    #             # This child line also has a BOM, recursively create MOs for it
-    #             self._check_and_create_missing_mos(
-    #                 child_line,
-    #                 root_bom,
-    #                 current_mo,  # ✅ This is now correctly set (either new or existing MO)
-    #                 child_qty,
-    #                 current_branch_location  # ✅ This is now correctly retrieved from existing MO
-    #             )
-
-    def _get_branch_location_for_line(self, line, root_bom):
-        """
-        Get branch location for a BOM line.
-        This ensures consistent location retrieval whether MO exists or not.
-        """
-        Branch = self.env['mrp.bom.line.branch']
-        branches = Branch.search([
-            ('bom_id', '=', root_bom.id),
-            ('bom_line_id', '=', line.id)
-        ], order='sequence', limit=1)
-
-        if branches and branches.location_id:
-            return branches.location_id.id, branches
-        return None, None
-
-    # def _check_and_create_missing_mos(self, line, root_bom, parent_mo=None, parent_qty=1.0,
-    #                                   parent_branch_location=None):
-    #     """
-    #     Recursively check if MOs exist for a line and all its children.
-    #     Create missing MOs for entire hierarchy.
-    #
-    #     Args:
-    #         line: Current BOM line being processed
-    #         root_bom: The TOP-LEVEL BOM that initiated this entire process (NEVER CHANGES in recursion)
-    #         parent_mo: The parent Manufacturing Order (changes at each level)
-    #         parent_qty: Accumulated quantity from parent levels
-    #         parent_branch_location: Location from parent branch (changes at each level)
-    #
-    #     IMPORTANT: root_bom should ALWAYS be the same throughout the entire recursive tree.
-    #                It represents the original/top-level BOM, not the current child_bom.
-    #     """
-    #     if not line.child_bom_id:
-    #         return
-    #
-    #     child_bom = line.child_bom_id
-    #     child_qty = float(line.product_qty or 1.0) * parent_qty
-    #
-    #     product_variant = child_bom.product_tmpl_id.product_variant_id
-    #     if product_variant.manufacture_purchase == 'buy':
-    #         return
-    #
-    #     # Check if MO exists for this line
-    #     # CRITICAL: We search using root_bom.id (the top-level BOM), not child_bom.id
-    #     existing_mo = self.env['mrp.production'].search([
-    #         ('root_bom_id', '=', root_bom.id),  # Same for all MOs in the hierarchy
-    #         ('line', '=', str(line.id)),
-    #         ('bom_id', '=', child_bom.id),  # This is the specific BOM for THIS MO
-    #         ('state', '=', 'draft')
-    #     ], limit=1)
-    #
-    #     current_mo = existing_mo
-    #     current_branch_location = parent_branch_location
-    #
-    #     if not existing_mo:
-    #         # Get branch for this line to determine locations
-    #         branch_location_id, branches = self._get_branch_location_for_line(line, root_bom)
-    #
-    #         if branch_location_id:
-    #             current_branch_location = branch_location_id
-    #
-    #         final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
-    #
-    #         # Get warehouse location
-    #         warehouse = self.env['stock.warehouse'].search([('company_id', '=', self.env.company.id)], limit=1)
-    #         stock_location = warehouse.lot_stock_id if warehouse else False
-    #
-    #         # Create MO for this line
-    #         _logger.info(f"Creating missing MO for line {line.id} (product: {line.product_id.display_name})")
-    #
-    #         mo_vals = {
-    #             'product_id': child_bom.product_tmpl_id.product_variant_id.id,
-    #             'product_uom_id': child_bom.product_uom_id.id,
-    #             'product_qty': child_qty,
-    #             'bom_id': child_bom.id,  # This is the specific BOM for THIS product
-    #             'root_bom_id': root_bom.id,  # This is ALWAYS the top-level BOM (same for entire hierarchy)
-    #             'parent_mo_id': parent_mo.id if parent_mo else False,
-    #             'project_id': root_bom.project_id.id,
-    #             'line': line.id,
-    #             'cr_final_location_id': final_dest_location if final_dest_location else False,
-    #             'branch_mapping_id': branches.id if branches else False,
-    #             # 'location_src_id': stock_location.id if stock_location else False,
-    #             # 'location_dest_id': final_dest_location if final_dest_location else False,
-    #             'state': 'draft',
-    #         }
-    #
-    #         _logger.info(
-    #             f"Creating MO with root_bom_id={root_bom.id} ({root_bom.display_name}), bom_id={child_bom.id} ({child_bom.display_name})")
-    #
-    #         current_mo = self.env['mrp.production'].with_context(
-    #             branch_intermediate_location=current_branch_location,
-    #             branch_final_location=final_dest_location,
-    #             skip_component_moves=True
-    #         ).create(mo_vals)
-    #
-    #         print('current_mo : ', current_mo)
-    #
-    #         # Send notification
-    #         branch_name = branches.branch_name if branches else "N/A"
-    #         src_name = stock_location.display_name if stock_location else "WH/Stock"
-    #         intermediate_name = self.env['stock.location'].browse(
-    #             current_branch_location).display_name if current_branch_location else "N/A"
-    #         final_name = self.env['stock.location'].browse(
-    #             final_dest_location).display_name if final_dest_location else "N/A"
-    #
-    #         self.env['bus.bus']._sendone(
-    #             self.env.user.partner_id,
-    #             "simple_notification",
-    #             {
-    #                 "title": "Manufacturing Order Created",
-    #                 "message": (
-    #                     f"MO {current_mo.name} created for {child_bom.display_name}\n"
-    #                     f"Branch: {branch_name}\n"
-    #                     f"Quantity: {child_qty}\n"
-    #                     f"Flow: {src_name} → {intermediate_name} → {final_name}"
-    #                 ),
-    #                 "sticky": False,
-    #                 "type": "info",
-    #             }
-    #         )
-    #     else:
-    #         # ✅ FIX: When MO already exists, retrieve its actual branch location and update missing fields
-    #         _logger.info(f"MO already exists for line {line.id}: {existing_mo.name}")
-    #         _logger.info(
-    #             f"Existing MO has root_bom_id={existing_mo.root_bom_id.id if existing_mo.root_bom_id else 'None'}, expected={root_bom.id}")
-    #
-    #         # Get branch location and branch record for this line
-    #         branch_location_id, branches = self._get_branch_location_for_line(line, root_bom)
-    #
-    #         # Prepare update values for existing MO
-    #         update_vals = {}
-    #
-    #         # ✅ CRITICAL: Ensure root_bom_id is correct (should never change, but verify)
-    #         if not existing_mo.root_bom_id or existing_mo.root_bom_id.id != root_bom.id:
-    #             update_vals['root_bom_id'] = root_bom.id
-    #             _logger.warning(
-    #                 f"CORRECTING root_bom_id for MO {existing_mo.name} from {existing_mo.root_bom_id.id if existing_mo.root_bom_id else 'None'} to {root_bom.id}")
-    #
-    #         # Update branch_mapping_id if missing or different
-    #         if branches:
-    #             if not existing_mo.branch_mapping_id or existing_mo.branch_mapping_id.id != branches.id:
-    #                 update_vals['branch_mapping_id'] = branches.id
-    #                 _logger.info(f"Updating branch_mapping_id for MO {existing_mo.name}")
-    #
-    #         # Update parent_mo_id if missing or different
-    #         parent_mo_id = parent_mo.id if parent_mo else False
-    #         if existing_mo.parent_mo_id.id if existing_mo.parent_mo_id else False != parent_mo_id:
-    #             update_vals['parent_mo_id'] = parent_mo_id
-    #             _logger.info(f"Updating parent_mo_id for MO {existing_mo.name}: {parent_mo_id}")
-    #
-    #         # Calculate final destination location
-    #         final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
-    #
-    #         # Update cr_final_location_id if missing or different
-    #         if not existing_mo.cr_final_location_id or existing_mo.cr_final_location_id != final_dest_location:
-    #             update_vals['cr_final_location_id'] = final_dest_location
-    #             _logger.info(f"Updating cr_final_location_id for MO {existing_mo.name}: {final_dest_location}")
-    #
-    #         # Write updates if any fields need to be updated
-    #         if update_vals:
-    #             existing_mo.write(update_vals)
-    #             _logger.info(f"Updated existing MO {existing_mo.name} with: {update_vals}")
-    #
-    #         # Set current_branch_location for recursive calls
-    #         # Option 1: Get from branch mapping (most reliable)
-    #         if existing_mo.branch_mapping_id and existing_mo.branch_mapping_id.location_id:
-    #             current_branch_location = existing_mo.branch_mapping_id.location_id.id
-    #         elif branch_location_id:
-    #             # Option 2: Get from the line's branch configuration (fallback)
-    #             current_branch_location = branch_location_id
-    #         elif hasattr(existing_mo, 'cr_final_location_id') and existing_mo.cr_final_location_id:
-    #             # Option 3: Use stored location on MO if available (last fallback)
-    #             current_branch_location = existing_mo.cr_final_location_id
-    #
-    #     # IMPORTANT: Recursively check ALL child lines (whether MO existed or was just created)
-    #     for child_line in child_bom.bom_line_ids:
-    #         if child_line.child_bom_id:
-    #             # This child line also has a BOM, recursively create MOs for it
-    #             # ✅ CRITICAL: root_bom parameter stays THE SAME - it's always the top-level BOM
-    #             #             Only current_mo and current_branch_location change at each level
-    #             self._check_and_create_missing_mos(
-    #                 child_line,
-    #                 root_bom,  # ✅ ALWAYS the same top-level BOM throughout entire hierarchy
-    #                 current_mo,  # ✅ This is now correctly set (either new or existing MO)
-    #                 child_qty,
-    #                 current_branch_location  # ✅ This is now correctly retrieved from existing MO
-    #             )
 
     def _check_and_create_missing_mos(self, line, root_bom, parent_mo=None, parent_qty=1.0,
                                       parent_branch_location=None):
@@ -1109,7 +520,6 @@ class MrpBom(models.Model):
         Recursively check if MOs exist for a line and all its children.
         Create missing MOs for entire hierarchy.
         """
-        print('root_bom : ',root_bom)
         if not line.child_bom_id:
             return
 
@@ -1160,7 +570,7 @@ class MrpBom(models.Model):
                 'branch_mapping_id': branches.id if branches else False,
                 'state': 'draft',
             }
-            print('mo_vals : ',mo_vals)
+
             _logger.info(
                 f"Creating MO with root_bom_id={root_bom.id} ({root_bom.display_name}), bom_id={child_bom.id} ({child_bom.display_name})")
 
@@ -1169,10 +579,6 @@ class MrpBom(models.Model):
                 branch_final_location=final_dest_location,
                 skip_component_moves=True
             ).create(mo_vals)
-
-            print('current_mo : ', current_mo)
-            print('root_bom : ', root_bom)
-            print('root_bom_id : ', current_mo.root_bom_id)
 
             if current_mo.root_bom_id.id != root_bom.id:
                 current_mo.root_bom_id = root_bom.id

@@ -24,9 +24,7 @@
 
             <!-- Add branch after product_id -->
             <xpath expr="//form//field[@name='product_id']" position="after">
-                <field name="approve_to_manufacture"/>
                 <field name="customer_ref"/>
-
             </xpath>
 
         </field>

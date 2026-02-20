@@ -6,90 +6,6 @@ class StockPicking(models.Model):
 
     root_bom_id = fields.Many2one('mrp.bom', string='Bom')
 
-    # def button_validate(self):
-    #
-    #     res = super(StockPicking, self).button_validate()
-    #
-    #     for picking in self:
-    #
-    #         if (
-    #             picking.picking_type_id.code == 'internal'
-    #             and picking.picking_type_id.name == 'Pick Components'
-    #             and picking.origin
-    #         ):
-    #             mo = self.env['mrp.production'].search(
-    #                 [('name', '=', picking.origin)],
-    #                 limit=1
-    #             )
-    #
-    #             if mo and mo.branch_mapping_id:
-    #
-    #                 for move in picking.move_ids_without_package:
-    #
-    #                     if move.state == 'done' and move.quantity > 0:
-    #                         component = self.env['mrp.bom.line.branch.components'].search([
-    #                             ('bom_line_branch_id', '=', mo.branch_mapping_id.id),
-    #                             ('cr_bom_line_id.product_id', '=', move.product_id.id)
-    #                         ], limit=1)
-    #
-    #
-    #                         if component:
-    #                             component.write({
-    #                                 'used': move.quantity
-    #                             })
-    #
-    #                             child_mrp = self.env['mrp.production'].search([('parent_mo_id','=',mo.id)])
-    #                             if child_mrp and child_mrp.branch_mapping_id:
-    #                                 if child_mrp.branch_mapping_id.bom_line_id.product_id.id == move.product_id.id:
-    #                                     child_mrp.branch_mapping_id.sudo().write({'used':move.quantity})
-    #
-    #                         else:
-    #                             if mo.branch_intermediate_location_id:
-    #                                 Branch = self.env['mrp.bom.line.branch'].search([
-    #                                     ('bom_id', '=', mo.root_bom_id.id),
-    #                                     ('used', '=', 0)
-    #                                 ])
-    #
-    #                                 if Branch:
-    #                                     for b in Branch:
-    #                                         if move.product_id.id == b.bom_line_id.product_id.id:
-    #                                             b.write({
-    #                                                 'used': move.quantity
-    #                                             })
-    #
-    #
-    #         if (
-    #             picking.picking_type_id.code == 'internal'
-    #             and picking.picking_type_id.name == 'Store Finished Product'
-    #             and picking.origin
-    #         ):
-    #             mo = self.env['mrp.production'].search(
-    #                 [('name', '=', picking.origin)],
-    #                 limit=1
-    #             )
-    #
-    #             if mo and mo.branch_mapping_id:
-    #
-    #                 for move in picking.move_ids_without_package:
-    #
-    #                     if move.state == 'done' and move.quantity > 0:
-    #                         mo.branch_mapping_id.write({
-    #                             'transferred': move.quantity
-    #                         })
-    #
-    #                         mo.branch_mapping_id.mrp_bom_line_branch_component_ids.write({
-    #                             'to_order': 0,
-    #                             'to_order_cfe': 0,
-    #                             'ordered': 0,
-    #                             'ordered_cfe': 0,
-    #                             'to_transfer': 0,
-    #                             'to_transfer_cfe': 0,
-    #                             'transferred': 0,
-    #                             'transferred_cfe': 0,
-    #                             'used': 0,
-    #                         })
-    #
-    #     return res
 
     def button_validate(self):
         res = super().button_validate()
@@ -164,15 +80,12 @@ class StockPicking(models.Model):
                 else:
                     self._update_child_mo_usage(mo, move, MrpModel)
 
-            print('is ? : ',not mo.branch_mapping_id)
             if not mo.branch_mapping_id:
-                print('yes...')
                 component = ComponentModel.search([
                     ('is_direct_component', '=', True),
                     ('root_bom_id','=',mo.root_bom_id.id),
                     ('cr_bom_line_id.product_id', '=', move.product_id.id)
                 ], limit=1)
-                print('component : ',component)
 
                 if component:
                     component.write({'used': move.quantity, 'transferred': 0,
@@ -234,6 +147,7 @@ class StockPicking(models.Model):
                 branch.write({
                     'transferred': 0,
                     'used': 0,
+                    'approve_to_manufacture':False,
                 })
 
             components = self.env['mrp.bom.line.branch.components'].search([
@@ -248,57 +162,6 @@ class StockPicking(models.Model):
                 })
 
 
-    # @api.model
-    # def create(self, vals):
-    #     picking = super(StockPicking , self.with_context(
-    #         bypass_custom_internal_transfer_restrictions=True
-    #     )).create(vals)
-    #     print('>>>>>>>>>>>>>>>123')
-    #     if (
-    #             picking.picking_type_id.code == 'internal'
-    #             and picking.picking_type_id.name == 'Pick Components'
-    #             and picking.origin
-    #     ):
-    #         mo = self.env['mrp.production'].search(
-    #             [('name', '=', picking.origin)],
-    #             limit=1
-    #         )
-    #
-    #         if mo and mo.branch_intermediate_location_id:
-    #             print('yyyyy')
-    #             picking.with_context(bypass_custom_internal_transfer_restrictions=True).write({
-    #                 'location_id': mo.branch_intermediate_location_id.id
-    #             })
-    #             print('yyyyasxadasdy')
-    #             vals['location_id'] = mo.branch_intermediate_location_id.id
-    #
-    #             # for move in picking.move_ids_without_package:
-    #             #     move.write({
-    #             #         'location_dest_id': mo.branch_intermediate_location_id.id
-    #             #     })
-    #
-    #     if (
-    #             picking.picking_type_id.code == 'internal'
-    #             and picking.picking_type_id.name == 'Store Finished Product'
-    #             and picking.origin
-    #     ):
-    #         mo = self.env['mrp.production'].search(
-    #             [('name', '=', picking.origin)],
-    #             limit=1
-    #         )
-    #
-    #         if mo and mo.cr_final_location_id:
-    #             picking.with_context(bypass_custom_internal_transfer_restrictions=True).write({
-    #                 'location_dest_id': mo.cr_final_location_id.id
-    #             })
-    #
-    #             for move in picking.move_ids_without_package:
-    #                 move.with_context(bypass_custom_internal_transfer_restrictions=True).write({
-    #                     'location_dest_id': mo.cr_final_location_id.id
-    #                 })
-    #
-    #
-    #     return picking
 
     @api.model
     def create(self, vals):

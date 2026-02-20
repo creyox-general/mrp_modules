@@ -46,6 +46,7 @@
                         <field name="mrp_bom_line_branch_component_ids" widget="one2many"/>
                         <field name="transferred"/>
                         <field name="used"/>
+                        <field name="approve_to_manufacture"/>
                     </group>
                 </sheet>
             </form>

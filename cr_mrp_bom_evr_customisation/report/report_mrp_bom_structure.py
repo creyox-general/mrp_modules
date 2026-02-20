@@ -74,8 +74,9 @@ class ReportBomStructureBranch(models.AbstractModel):
             data["branch"] = branch.branch_name if branch else ""
 
             if branch and branch.branch_name:
+                data['branch_id'] = branch.id
                 data['approve_to_manufacture_editable'] = True
-                data['approve_to_manufacture'] = bom_line.approve_to_manufacture
+                data['approve_to_manufacture'] = branch.approve_to_manufacture
                 data['display_free_to_use'] = True
                 data['customer_ref_editable'] = True
                 data["free_to_use"] = branch.free_to_use

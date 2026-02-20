@@ -59,7 +59,7 @@
                            t-model="data.approve_to_manufacture"
                            t-att-data-bom-line-id="data.bom_line_id"
                            t-on-change="onApproveToManufactureChange"/>
-                     <span t-elif="data.approve_to_manufacture"
+                     <span t-elif="data.approve_to_manufacture and data.approve_to_manufacture_editable"
                            class="badge badge-success bg-success text-white">✓</span>
                      <span t-else="" class="text-muted"></span>
                 </td>

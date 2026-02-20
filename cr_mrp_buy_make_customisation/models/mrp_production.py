@@ -21,60 +21,8 @@ class MrpProduction(models.Model):
 
         record = super().create(vals)
 
-        # # Run logic only for root MO
-        # if (
-        #         record.bom_id
-        #         and record.root_bom_id
-        #         and record.bom_id.id == record.root_bom_id.id
-        # ):
-        #     branches = self.env['mrp.bom.line.branch'].search([
-        #         ('bom_id', '=', record.bom_id.id)
-        #     ])
-        #
-        #     for branch in branches:
-        #         branch.write({
-        #             'transferred': 0,
-        #             'used': 0
-        #         })
-
         return record
 
-    def _check_descendant_approval(self, bom):
-        """
-        Check approval ONLY for lines that have a child BOM
-        and are effectively marked as MAKE.
-        """
-
-        lines = self.env['mrp.bom.line'].search([
-            ('bom_id', '=', bom.id),
-        ])
-
-        for line in lines:
-
-            # Skip lines that do NOT have child BOM
-            if not line.child_bom_id:
-                continue
-
-            product_variant = line.child_bom_id.product_tmpl_id.product_variant_id
-
-            # ✅ Skip if product is BUY
-            if product_variant.manufacture_purchase == 'buy':
-                continue
-
-            # ✅ Skip if product is MAKE but line forces BUY
-            if (product_variant.manufacture_purchase == 'make' and
-                    line.buy_make_selection == 'buy'):
-                continue
-
-            # 🚨 Now this line is effectively MAKE → must be approved
-            if not line.approve_to_manufacture:
-                return False
-
-            # Go deeper only for effective MAKE lines
-            if not self._check_descendant_approval(line.child_bom_id):
-                return False
-
-        return True
 
     @api.constrains('state')
     def _check_buy_make_selection_before_confirm(self):
@@ -107,41 +55,6 @@ class MrpProduction(models.Model):
 
         return result
 
-    # def _check_descendant_approval(self, bom):
-    #     """
-    #     Override to skip BUY-selected lines in approval check
-    #     """
-    #     lines = self.env['mrp.bom.line'].search([
-    #         ('bom_id', '=', bom.id),
-    #     ])
-    #
-    #     for line in lines:
-    #         # Skip if BUY/MAKE product with BUY selected (treat as component)
-    #         if (line.product_id.manufacture_purchase == 'buy_make' and
-    #                 line.buy_make_selection == 'buy'):
-    #             _logger.info(
-    #                 "Skipping approval check for BOM line %s (BUY selected)",
-    #                 line.id
-    #             )
-    #             continue
-    #
-    #         # Skip lines that do NOT have child BOM
-    #         if not line.child_bom_id:
-    #             continue
-    #
-    #         # If this line with child BOM is NOT approved → FAIL
-    #         if not line.approve_to_manufacture:
-    #             _logger.warning(
-    #                 "BOM line %s not approved, blocking parent MO confirmation",
-    #                 line.id
-    #             )
-    #             return False
-    #
-    #         # If approved and has child BOM → go deeper
-    #         if not self._check_descendant_approval(line.child_bom_id):
-    #             return False
-    #
-    #     return True
 
     @api.depends('state', 'reservation_state', 'date_start', 'move_raw_ids', 'move_raw_ids.forecast_availability', 'move_raw_ids.forecast_expected_date','move_raw_ids.critical')
     def _compute_components_availability(self):

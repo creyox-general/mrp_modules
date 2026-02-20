@@ -184,17 +184,17 @@ async onBuyMakeChange(event) {
         const oldValue = this.props.data.critical;
 
         // Prevent change if already approved to manufacture
-        if (this.props.data.approve_to_manufacture) {
-            event.target.checked = oldValue;
-            this.notification.add(
-                "Cannot change critical status after approval to manufacture",
-                {
-                    type: "warning",
-                    title: "Action Not Allowed"
-                }
-            );
-            return;
-        }
+//        if (this.props.data.approve_to_manufacture) {
+//            event.target.checked = oldValue;
+//            this.notification.add(
+//                "Cannot change critical status after approval to manufacture",
+//                {
+//                    type: "warning",
+//                    title: "Action Not Allowed"
+//                }
+//            );
+//            return;
+//        }
 
         try {
             // Update the BOM line in backend
@@ -211,8 +211,8 @@ async onBuyMakeChange(event) {
                 // Show success notification
                 this.notification.add(
                     newValue
-                        ? `${this.props.data.product.display_name} marked as Critical`
-                        : `${this.props.data.product.display_name} unmarked as Critical`,
+                        ? `${this.props.data.display_name} marked as Critical`
+                        : `${this.props.data.display_name} unmarked as Critical`,
                     {
                         type: "success",
                         title: "Critical Status Updated"

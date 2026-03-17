@@ -22,6 +22,7 @@ patch(BomOverviewLine, {
             displayCost: Boolean,
             customerRef: Boolean,
             poLineId: Boolean,
+            images: Boolean,
         },
     },
 });
@@ -38,57 +39,78 @@ patch(BomOverviewLine.prototype, {
 
     },
 
+    onCfeFocus(event) {
+        // Store the value before editing to allow revert
+        this.previousCfeValue = event.target.value;
+    },
+
     async onCfeQuantityChange(event) {
         const componentId = this.props.data.componentId || false;
-        console.log('componentId : ',componentId)
-        const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
-        const newValue = parseFloat(event.target.value);
+        const newValueStr = event.target.value;
+        const newValue = parseFloat(newValueStr || 0);
         const crQty = parseFloat(this.cr_qty || 0);
-        console.log('newValue : ',newValue)
-        console.log('crQty : ',crQty)
 
         // ✅ Validation: CFE must be SMALLER than CR
-        if (newValue > crQty) {
-                this.env.services.notification.add(
+        if (newValueStr && newValue > crQty) {
+            this.env.services.notification.add(
                 "CFE Quantity must be smaller than Quantity.",
                 { type: "danger" }
-        );
+            );
 
-        event.target.value = this.props.data.cfe_quantity || '';
-        return;
+            // Revert to previous value
+            event.target.value = this.previousCfeValue || '';
+            return;
         }
 
-
-         if (componentId) {
+        if (componentId) {
             await this.ormService.write("mrp.bom.line.branch.components", [componentId], {
-                cfe_quantity: newValue,quantity: crQty,
+                cfe_quantity: newValueStr, // It's a Char field in DB
+                quantity: crQty,
             });
 
             // Update UI instantly
-            this.props.data.cfe_quantity = newValue;
-            this.props.data.has_cfe_quantity = true;
+            this.props.data.cfe_quantity = newValueStr;
+            this.props.data.has_cfe_quantity = !!newValueStr;
         }
+    },
+
+    onMoClick(moId) {
+        if (!moId) return;
+
+        this.actionService.doAction({
+            type: 'ir.actions.act_window',
+            res_model: 'mrp.production',
+            res_id: moId,
+            views: [[false, 'form']],
+            target: 'current',
+        });
     },
 
 
     async onApproval1Change(event) {
         const componentId = this.props.data.componentId || false;
-        const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
         const isChecked = event.target.checked;
         const crQty = parseFloat(this.cr_qty || 0);
 
+        if (isChecked && !this.props.data.has_main_vendor) {
+            this.notification.add(
+                "Approval 1 can be marked only if the product has a main vendor.",
+                { type: "danger" }
+            );
+            event.target.checked = false;
+            this.props.data.approval_1 = false;
+            return;
+        }
+
         if (componentId) {
             await this.ormService.write("mrp.bom.line.branch.components", [componentId], {
-                approval_1: isChecked,quantity: crQty,
+                approval_1: isChecked, quantity: crQty,
             });
-
-            // Update UI instantly
-//            this.props.data.isChecked = newValue;
         }
     },
 
     async onApproval2Change(event) {
-    // Check permission first
+        // Check permission first
         if (!this.canEditApproval2) {
             this.notification.add(
                 "You don't have permission to edit Approval 2. Only Manufacturing/Admin or Purchase/Admin can edit this field.",
@@ -98,17 +120,29 @@ patch(BomOverviewLine.prototype, {
             event.preventDefault();
             return;
         }
+
         const componentId = this.props.data.componentId || false;
-        const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
         const isChecked = event.target.checked;
         const crQty = parseFloat(this.cr_qty || 0);
-        if (componentId) {
-            await this.ormService.write("mrp.bom.line.branch.components", [componentId], {
-                approval_2: isChecked,quantity: crQty,
-            });
 
-            // Update UI instantly
-//            this.props.data.isChecked = newValue;
+        if (isChecked && !this.props.data.has_main_vendor) {
+            this.notification.add(
+                "Approval 2 can be marked only if the product has a main vendor.",
+                { type: "danger" }
+            );
+            event.target.checked = false;
+            this.props.data.approval_2 = false;
+            return;
+        }
+
+        if (componentId) {
+            const vals = { approval_2: isChecked, quantity: crQty };
+            if (isChecked) {
+                vals.approval_1 = true;
+                this.props.data.approval_1 = true;
+            }
+
+            await this.ormService.write("mrp.bom.line.branch.components", [componentId], vals);
         }
     },
 
@@ -132,14 +166,14 @@ patch(BomOverviewLine.prototype, {
                     [[componentId], selectedManufacturerId]
                 );
 
-            }catch (err) {
+            } catch (err) {
                 const msg = (err?.data?.message) || (err?.message) || "Failed to save Vendor";
                 this.notification.add(msg, { type: "danger" });
             }
         }
     },
 
-async goToAction(id, model) {
+    async goToAction(id, model) {
         if (model === "product.product" || model === "product.template") {
             const mainBomIds = await this.ormService.call(
                 "mrp.bom",
@@ -150,26 +184,26 @@ async goToAction(id, model) {
             );
 
             if (mainBomIds && mainBomIds.length > 0) {
-            return this.actionService.doAction({
-                type: "ir.actions.act_window",
-                res_model: "mrp.bom",
-                res_id: mainBomIds[0],
-                views: [[false, "form"]],
-                target: "current",
-                context: {
-                    active_id: mainBomIds[0],
-                },
-            });
-        }
+                return this.actionService.doAction({
+                    type: "ir.actions.act_window",
+                    res_model: "mrp.bom",
+                    res_id: mainBomIds[0],
+                    views: [[false, "form"]],
+                    target: "current",
+                    context: {
+                        active_id: mainBomIds[0],
+                    },
+                });
+            }
 
         }
 
         return super.goToAction(id, model);
     },
 
-openImageModal(productId, productName) {
-    const safeProductName = productName || 'Product Image';
-    const modalHtml = `
+    openImageModal(productId, productName) {
+        const safeProductName = productName || 'Product Image';
+        const modalHtml = `
         <div class="modal fade" id="productImageModal" tabindex="-1" role="dialog">
             <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
                 <div class="modal-content">
@@ -192,40 +226,40 @@ openImageModal(productId, productName) {
         </div>
     `;
 
-    const existingModal = document.getElementById('productImageModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
+        const existingModal = document.getElementById('productImageModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
 
-    const existingBackdrop = document.getElementById('productImageBackdrop');
-    if (existingBackdrop) {
-        existingBackdrop.remove();
-    }
+        const existingBackdrop = document.getElementById('productImageBackdrop');
+        if (existingBackdrop) {
+            existingBackdrop.remove();
+        }
 
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-    const modalElement = document.getElementById('productImageModal');
-    modalElement.classList.add('show');
-    modalElement.style.display = 'block';
-    document.body.classList.add('modal-open');
+        const modalElement = document.getElementById('productImageModal');
+        modalElement.classList.add('show');
+        modalElement.style.display = 'block';
+        document.body.classList.add('modal-open');
 
-    const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop fade show';
-    backdrop.id = 'productImageBackdrop';
-    document.body.appendChild(backdrop);
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'productImageBackdrop';
+        document.body.appendChild(backdrop);
 
-    const closeModal = () => {
-        modalElement.classList.remove('show');
-        modalElement.style.display = 'none';
-        document.body.classList.remove('modal-open');
-        backdrop.remove();
-        modalElement.remove();
-    };
+        const closeModal = () => {
+            modalElement.classList.remove('show');
+            modalElement.style.display = 'none';
+            document.body.classList.remove('modal-open');
+            backdrop.remove();
+            modalElement.remove();
+        };
 
-    modalElement.querySelector('.btn-close').addEventListener('click', closeModal);
-    modalElement.querySelector('.close-modal-btn').addEventListener('click', closeModal);
-    backdrop.addEventListener('click', closeModal);
-},
+        modalElement.querySelector('.btn-close').addEventListener('click', closeModal);
+        modalElement.querySelector('.close-modal-btn').addEventListener('click', closeModal);
+        backdrop.addEventListener('click', closeModal);
+    },
 
     get availabilityColorClass() {
         if (!this.props.data.hasOwnProperty('availability_state')) {
@@ -241,14 +275,14 @@ openImageModal(productId, productName) {
     },
     async onApproveToManufactureChange(event) {
         const rootBomId = this.props.data.root_bom_id;
-        console.log('rootBomId : ',rootBomId)
-        console.log('this.props.data.branch_id : ',this.props.data.branch_id)
+        console.log('rootBomId : ', rootBomId)
+        console.log('this.props.data.branch_id : ', this.props.data.branch_id)
         const branch = this.props.data.branch_id;
-        console.log('branch : ',branch)
+        console.log('branch : ', branch)
         const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
-        console.log('bomLineId : ',bomLineId)
+        console.log('bomLineId : ', bomLineId)
         const isChecked = event.target.checked;
-        console.log('isChecked : ',isChecked)
+        console.log('isChecked : ', isChecked)
 
         if (!branch) return;
 
@@ -257,7 +291,7 @@ openImageModal(productId, productName) {
                 "mrp.bom.line.branch",
                 "action_toggle_approve_to_manufacture",
                 [[branch], isChecked],
-                { context: { root_bom_id: rootBomId ,line: bomLineId} }
+                { context: { root_bom_id: rootBomId, line: bomLineId } }
             );
 
             if (result.success) {
@@ -297,16 +331,16 @@ openImageModal(productId, productName) {
     },
 
 
-onPoClick(poId) {
-    if (!poId) return;
+    onPoClick(poId) {
+        if (!poId) return;
 
-    this.actionService.doAction({
-        type: 'ir.actions.act_window',
-        res_model: 'purchase.order',
-        res_id: poId,
-        views: [[false, 'form']],
-        target: 'current',
-    });
-}
+        this.actionService.doAction({
+            type: 'ir.actions.act_window',
+            res_model: 'purchase.order',
+            res_id: poId,
+            views: [[false, 'form']],
+            target: 'current',
+        });
+    }
 
 });

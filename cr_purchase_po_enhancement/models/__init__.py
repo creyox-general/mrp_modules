@@ -10,5 +10,7 @@ from . import approval_request
 from . import mrp_production
 from . import mrp_bom_line_branch_components
 from . import product_product
+from . import product_template
+from . import product_supplierinfo
 from . import approval_product_line
 from . import res_config_settings

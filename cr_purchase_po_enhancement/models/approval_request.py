@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Part of Creyox Technologies
-from odoo import models, fields
+from odoo import models, fields,_
 
 
 class ApprovalRequest(models.Model):
@@ -31,13 +31,17 @@ class ApprovalRequest(models.Model):
                     purchase_line.product_qty += line.po_uom_qty
                     purchase_order = purchase_line.order_id
                     purchase_order.po_type = 'urgt'
+                    
+                    self.message_post(body=_("Updated RFQ %s: added %s %s of %s") % (
+                        purchase_order._get_html_link(), line.quantity, line.product_uom_id.name, line.product_id.display_name
+                    ))
 
                     # Add custom fields from line
                     if line.cr_component_id:
                         purchase_line.component_branch_id = line.cr_component_id
-
                         comp = self.env['mrp.bom.line.branch.components'].browse(line.cr_component_id)
                         comp.vendor_po_ids = [(4, purchase_line.id)]
+                        purchase_line.branch_id = comp.bom_line_branch_id.id
                     if line.cr_root_bom_id:
                         purchase_line.bom_id = line.cr_root_bom_id
                         bom = self.env['mrp.bom'].browse(line.cr_root_bom_id)
@@ -47,7 +51,7 @@ class ApprovalRequest(models.Model):
 
                     if line.cr_bom_line_id:
                         bom_line = self.env['mrp.bom.line'].browse(line.cr_bom_line_id)
-                        if bom_line:
+                        if bom_line and hasattr(bom_line, 'po_line_id'):
                             bom_line.po_line_id = purchase_line.id
 
                 else:
@@ -64,6 +68,9 @@ class ApprovalRequest(models.Model):
                     # Add custom fields from line
                     if line.cr_component_id:
                         po_line_vals['component_branch_id'] = line.cr_component_id
+                        comp = self.env['mrp.bom.line.branch.components'].browse(line.cr_component_id)
+                        po_line_vals['branch_id'] = comp.bom_line_branch_id.id
+
                     if line.cr_root_bom_id:
                         po_line_vals['bom_id'] = line.cr_root_bom_id
                         bom = self.env['mrp.bom'].browse(line.cr_root_bom_id)
@@ -76,16 +83,26 @@ class ApprovalRequest(models.Model):
                     if line.cr_component_id:
                         comp = self.env['mrp.bom.line.branch.components'].browse(line.cr_component_id)
                         comp.vendor_po_ids = [(4, new_po_line.id)]
-                    # line.cr_bom_line_id.po_line_id = new_po_line.id
+                        new_po_line.branch_id = comp.bom_line_branch_id.id
+                    
                     line.purchase_order_line_id = new_po_line.id
-                    purchase_order.order_line = [(4, new_po_line.id)]
-                    purchase_order.po_type = 'urgt'
-
-                    # Attach PO line to BOM line
                     if line.cr_bom_line_id:
                         bom_line = self.env['mrp.bom.line'].browse(line.cr_bom_line_id)
-                        if bom_line:
+                        if bom_line and hasattr(bom_line, 'po_line_id'):
                             bom_line.po_line_id = new_po_line.id
+
+                    purchase_order.order_line = [(4, new_po_line.id)]
+                    purchase_order.po_type = 'urgt'
+                    
+                    self.message_post(body=_("Added line to RFQ %s: %s %s of %s") % (
+                        purchase_order._get_html_link(), line.quantity, line.product_uom_id.name, line.product_id.display_name
+                    ))
+
+                    # Attach PO line to BOM line
+                    # if line.cr_bom_line_id:
+                    #     bom_line = self.env['mrp.bom.line'].browse(line.cr_bom_line_id)
+                    #     if bom_line:
+                    #         bom_line.po_line_id = new_po_line.id
 
                 # Add origin
                 new_origin = set([self.name])
@@ -119,6 +136,8 @@ class ApprovalRequest(models.Model):
                 # Add custom fields from line
                 if line.cr_component_id:
                     po_line_vals['component_branch_id'] = line.cr_component_id
+                    comp = self.env['mrp.bom.line.branch.components'].browse(line.cr_component_id)
+                    po_line_vals['branch_id'] = comp.bom_line_branch_id.id
                 if line.cr_root_bom_id:
                     po_line_vals['bom_id'] = line.cr_root_bom_id
                     bom = self.env['mrp.bom'].browse(line.cr_root_bom_id)
@@ -130,11 +149,22 @@ class ApprovalRequest(models.Model):
                 if line.cr_component_id:
                     comp = self.env['mrp.bom.line.branch.components'].browse(line.cr_component_id)
                     comp.vendor_po_ids = [(4, new_po_line.id)]
+                    new_po_line.branch_id = comp.bom_line_branch_id.id
+
                 line.purchase_order_line_id = new_po_line.id
                 new_purchase_order.order_line = [(4, new_po_line.id)]
 
-                # Attach PO line to BOM line
                 if line.cr_bom_line_id:
                     bom_line = self.env['mrp.bom.line'].browse(line.cr_bom_line_id)
-                    if bom_line:
+                    if bom_line and hasattr(bom_line, 'po_line_id'):
                         bom_line.po_line_id = new_po_line.id
+
+                self.message_post(body=_("Created RFQ %s for vendor %s") % (
+                    new_purchase_order._get_html_link(), vendor.display_name
+                ))
+
+                # Attach PO line to BOM line
+                # if line.cr_bom_line_id:
+                #     bom_line = self.env['mrp.bom.line'].browse(line.cr_bom_line_id)
+                #     if bom_line:
+                #         bom_line.po_line_id = new_po_line.id

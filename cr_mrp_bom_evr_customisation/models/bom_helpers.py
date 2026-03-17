@@ -9,20 +9,36 @@ class MrpBomHelpers(models.AbstractModel):
     @api.model
     def _get_parent_bom_lines(self, bom):
         """
-        Find bom.line records whose child_bom_id == bom.id.
-        Cannot search child_bom_id directly → filter in Python.
+        Find bom.line records that lead to this 'bom'.
+        Includes lines with explicit child_bom_id, AND lines where child_bom_id 
+        is NULL but this is the default BOM for the product.
         """
         BomLine = self.env["mrp.bom.line"]
+        
+        # Determine if this is the default BOM for its own product
+        product = bom.product_id or bom.product_tmpl_id.product_variant_id
+        # Use existing method in mrp.bom to find default/first BOM
+        first_bom = self.env['mrp.bom']._get_first_created_bom(product)
+        is_default_bom = (first_bom and first_bom.id == bom.id)
 
         # Step 1: Get all BOM lines whose product might trigger this BOM
         possible_lines = BomLine.search([
-            ("product_id.product_tmpl_id", "=", bom.product_tmpl_id.id)
+            '|',
+            ("product_id.product_tmpl_id", "=", bom.product_tmpl_id.id),
+            ("product_tmpl_id", "=", bom.product_tmpl_id.id)
         ])
 
-        # Step 2: Filter by actual child_bom_id relation
-        parent_lines = possible_lines.filtered(
-            lambda l: l.child_bom_id and l.child_bom_id.id == bom.id
-        )
+        # Step 2: Filter by actual child_bom_id relation OR evaluate first created BOM
+        def is_parent(l):
+            if l.child_bom_id and l.child_bom_id.id == bom.id:
+                return True
+            if not l.child_bom_id and hasattr(l.bom_id, '_get_first_created_bom'):
+                first_bom = l.bom_id._get_first_created_bom(l.product_id)
+                if first_bom and first_bom.id == bom.id:
+                    return True
+            return False
+
+        parent_lines = possible_lines.filtered(is_parent)
 
         return parent_lines
 
@@ -45,9 +61,12 @@ class MrpBomHelpers(models.AbstractModel):
             # Use the SAFE parent finder (no search on child_bom_id)
             parent_lines = self._get_parent_bom_lines(bom)
 
-            if not parent_lines:
-                # No parents ⇒ this is a root BOM
+            # If it has no parents OR it has its own Project/Sale Order, it is a Root BOM
+            if not parent_lines or bom.cfe_project_location_id or getattr(bom, 'sale_order_id', False):
                 roots.add(bom)
+
+            # If it has no parents, we can stop traversing this branch
+            if not parent_lines:
                 continue
 
             # Add all parent BOMs to queue

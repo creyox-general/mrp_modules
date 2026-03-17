@@ -2,6 +2,7 @@
 # Part of Creyox Technologies.
 from odoo import api, fields, models, _
 from odoo.addons import decimal_precision as dp
+from markupsafe import Markup
 
 class MrpBomLineBranchComponents(models.Model):
     _name = "mrp.bom.line.branch.components"
@@ -41,6 +42,7 @@ class MrpBomLineBranchComponents(models.Model):
     root_bom_id = fields.Many2one('mrp.bom', string='Root BOM', ondelete='cascade')
     bom_id = fields.Many2one('mrp.bom', string='Just Child BOM', ondelete='cascade')
     cr_bom_line_id = fields.Many2one('mrp.bom.line', string='BOM Line', ondelete='cascade', index=True)
+    root_line_id = fields.Many2one('mrp.bom.line', string='Root Component Line', index=True, ondelete='cascade')
     to_order = fields.Float(string='To Order', default=0.0)
     to_order_cfe = fields.Float(string='To Order CFE', default=0.0)
     ordered = fields.Float(string='Ordered', default=0.0)
@@ -163,12 +165,70 @@ class MrpBomLineBranchComponents(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        """Override to prevent recursive branch assignment"""
+        """Override to prevent recursive branch assignment and enforce approval logic"""
+        for vals in vals_list:
+            if vals.get('approval_2'):
+                vals['approval_1'] = True
         return super(MrpBomLineBranchComponents, self.with_context(skip_branch_recompute=True)).create(vals_list)
 
+    @api.constrains('approval_1', 'approval_2')
+    def _check_approvals_main_vendor(self):
+        for line in self:
+            if (line.approval_1 or line.approval_2) and not line.cr_bom_line_id.product_id.product_main_vendor_id:
+                raise models.ValidationError(_("Approvals can be marked only if the product has a main vendor."))
+
     def write(self, vals):
-        """Override to prevent recursive branch assignment"""
-        return super(MrpBomLineBranchComponents, self.with_context(skip_branch_recompute=True)).write(vals)
+        """Override to prevent recursive branch assignment and enforce approval logic"""
+        if vals.get('approval_2'):
+            vals['approval_1'] = True
+            
+        # Call super first to apply changes to the record
+        res = super(MrpBomLineBranchComponents, self.with_context(skip_branch_recompute=True)).write(vals)
+
+        # Refined Approval Revocation Logic
+        # Trigger only if both approvals are now False AND at least one was just changed
+        if 'approval_1' in vals or 'approval_2' in vals:
+            for line in self:
+                if not line.approval_1 and not line.approval_2:
+                    # Find linked PO lines BEFORE any deletion
+                    linked_po_lines = line.customer_po_ids | line.vendor_po_ids
+                    if not linked_po_lines:
+                        continue
+                    
+                    draft_lines = linked_po_lines.filtered(lambda l: l.order_id.state in ['draft', 'sent', 'to approve'])
+                    confirmed_lines = linked_po_lines.filtered(lambda l: l.order_id.state not in ['draft', 'sent', 'cancel', 'to approve'])
+
+                    # 1. Notify for confirmed lines FIRST (while records exist)
+                    if confirmed_lines:
+                        for po_line in confirmed_lines:
+                            buyer = po_line.order_id.user_id
+                            if not buyer:
+                                continue
+                            
+                            buyer_name = f"@{buyer.partner_id.name}" if buyer.partner_id else ""
+                            title = _("BOM Approval Removed")
+                            body = _("%s ATTENTION: Approval for component %s has been REMOVED in the BOM Overview for PO %s. Please review and remove this line if no longer needed.") % (buyer_name, po_line.product_id.display_name, po_line.order_id.name)
+                            
+                            # A. Real-time Toast
+                            self.env['bus.bus']._sendone(buyer.partner_id, 'simple_notification', {
+                                'title': title,
+                                'message': body,
+                                'sticky': True,
+                                'type': 'warning',
+                            })
+                            
+                            # B. Direct Odoo Notification
+                            po_line.order_id.message_notify(
+                                partner_ids=buyer.partner_id.ids,
+                                body=body,
+                                subject=title,
+                            )
+                    
+                    # 2. Delete draft PO lines AFTER notification
+                    if draft_lines:
+                        draft_lines.unlink()
+
+        return res
 
     def unlink(self):
         """Override to prevent recursive branch assignment"""

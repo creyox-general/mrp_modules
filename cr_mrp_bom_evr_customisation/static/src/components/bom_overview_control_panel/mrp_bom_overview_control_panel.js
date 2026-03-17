@@ -8,6 +8,7 @@ import { _t } from "@web/core/l10n/translation";
 patch(BomOverviewControlPanel, {
     props: {
         ...BomOverviewControlPanel.props,
+        bomQuantity: { type: Number, optional: true },
         isEvr: { type: Boolean, optional: true },
     },
 });

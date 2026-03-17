@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Smart Button on Sale Order Form: BOM Count -->
+    <record id="sale_order_form_bom_button_inherit" model="ir.ui.view">
+        <field name="name">sale.order.form.bom.button.inherit</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button
+                    name="action_view_boms"
+                    type="object"
+                    class="oe_stat_button"
+                    icon="fa-sitemap"
+                    invisible="bom_count == 0">
+                    <field name="bom_count" widget="statinfo" string="BOMs"/>
+                </button>
+                <button
+                    name="action_view_so_confirmed_mos"
+                    type="object"
+                    class="oe_stat_button"
+                    icon="fa-industry"
+                    invisible="so_confirmed_mo_count == 0">
+                    <field name="so_confirmed_mo_count" widget="statinfo" string="Confirmed MOs"/>
+                </button>
+            </xpath>
+        </field>
+    </record>
+</odoo>

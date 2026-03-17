@@ -65,7 +65,7 @@
 
     <t t-inherit="mrp.BomOverviewLine" t-inherit-mode="extension">
         <xpath expr="//td[@name='td_mrp_bom']" position="after">
-            <td t-if="data.is_evr" class="text-center">
+            <td t-if="data.is_evr and props.showOptions.specialPo" class="text-center">
                 <t t-if="data.cfe_editable">
                      <button type="button"
                         class="btn btn-sm btn-secondary"

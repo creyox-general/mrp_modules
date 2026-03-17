@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Add Sale Order field to BOM form view -->
+    <record id="mrp_bom_form_view_so_inherit" model="ir.ui.view">
+        <field name="name">mrp.bom.form.so.inherit</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='code']" position="after">
+                <field name="sale_order_id" readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Hide Project ID when is_evr is true -->
+    <record id="mrp_bom_form_view_project_hide_inherit" model="ir.ui.view">
+        <field name="name">mrp.bom.form.project.hide.inherit</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="project_mrp.mrp_bom_form_view_inherited_project_mrp"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='project_id']" position="attributes">
+                <attribute name="invisible">not is_evr</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -2,7 +2,7 @@
 # Part of Creyox Technologies
 {
     'name': 'Purchase Order Enhancement',
-    'version': '18.0.0.19',
+    'version': '18.0.0.26',
     'category': 'Purchase',
     'summary': 'Enhanced PO management with types, vendor status, and follow-up',
     'depends': [
@@ -15,11 +15,13 @@
         'cr_mrp_bom_evr_automation',
         "bizzup_product_customisation",
         'cr_mrp_buy_make_customisation',
-        "purchase_stock"
+        "purchase_stock",
+        "sh_pol_views"
     ],
     'data': [
         "views/res_config_settings.xml",
         'views/purchase_order_views.xml',
+        'views/purchase_order_line_views.xml',
         'views/res_partner_views.xml',
         'views/po_line_followup_views.xml',
         'views/menu_views.xml',
@@ -35,4 +37,6 @@
     },
     'installable': True,
     'application': False,
+    'auto_install': False,
+    'license': 'LGPL-3',
 }

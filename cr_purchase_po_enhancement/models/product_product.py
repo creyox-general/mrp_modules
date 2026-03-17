@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Part of Creyox Technologies
-from odoo import models
+from odoo import models,fields
 from odoo.exceptions import UserError
 
 class ProductProduct(models.Model):
@@ -44,3 +44,11 @@ class ProductProduct(models.Model):
             'view_mode': 'form',
             'target': 'current',
         }
+
+
+class ProductManufacturerDetail(models.Model):
+    _inherit = 'product.manufacturer.detail'
+    _rec_name = 'manufacturer_id'
+    _description = 'Product Manufacturer Detail'
+
+    manufacture_internal_ref = fields.Char(string='MFG PN', copy=False)

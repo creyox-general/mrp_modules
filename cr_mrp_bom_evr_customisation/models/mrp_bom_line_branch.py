@@ -12,6 +12,8 @@ class MrpBomLineBranch(models.Model):
     bom_line_id = fields.Many2one('mrp.bom.line', string='BOM Line', ondelete='cascade', index=True)
     branch_name = fields.Char(string='Branch', required=True, index=True)
     sequence = fields.Integer(string='Sequence', default=0)
+    parent_branch_id = fields.Many2one('mrp.bom.line.branch', string='Parent Branch', index=True, ondelete='cascade')
+    root_line_id = fields.Many2one('mrp.bom.line', string='Root Component Line', index=True, ondelete='cascade')
     path_uid = fields.Char(string='Path UID', index=True)
     location_id = fields.Many2one('stock.location', string='Branch Location', ondelete='set null')
     mrp_bom_line_branch_component_ids = fields.One2many(

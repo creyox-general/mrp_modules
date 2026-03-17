@@ -42,6 +42,9 @@ patch(BomOverviewTable.prototype, {
     },
     get showPoLineId() {
         return this.props.showOptions.poLineId;
+    },
+    get showImages() {
+        return this.props.showOptions.images;
     }
 });
 
@@ -63,7 +66,7 @@ patch(BomOverviewTable, {
             displayCost: Boolean,
             customerRef: Boolean,
             poLineId: Boolean,
-
+            images: Boolean,
         },
     },
 });

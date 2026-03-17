@@ -3,7 +3,7 @@
 {
     "name": "MRP BOM EVR Customisation",
     "summary": "Custom enhancements for MRP BOM and EVR processes",
-    "version": "18.0.0.16",
+    "version": "18.0.0.25",
     "category": "Manufacturing",
     "license": "LGPL-3",
     'author': 'Creyox Technologies',
@@ -23,13 +23,16 @@
         "views/mrp_bom_line_view.xml",
         "views/mrp_production.xml",
         "views/purchase_order_line.xml",
+        "views/mrp_bom_usage_view.xml",
+        "views/mrp_bom_action_view.xml",
     ],
     'assets': {
         'web.assets_backend': [
             'cr_mrp_bom_evr_customisation/static/src/**/*',
         ],
     },
-    "installable": True,
-    "application": False,
-    "auto_install": False,
+    'installable': True,
+    'application': False,
+    'auto_install': False,
+    'license': 'LGPL-3',
 }

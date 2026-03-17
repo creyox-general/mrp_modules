@@ -61,76 +61,76 @@ patch(BomOverviewLine.prototype, {
         });
     },
 
-//    async _createApprovalRequest(actionType, quantity, bomLineId, componentId, rootBomId) {
-//        try {
-//            const result = await this.ormService.call(
-//                "mrp.bom.line",
-//                "create_special_po_approval",
-//                [bomLineId, actionType, quantity, componentId, rootBomId]
-//            );
-//
-//            if (result && result.approval_id) {
-//                this.notification.add("Approval request created successfully", {
-//                    type: "success",
-//                });
-//
-//                // Open approval request
-//                this.actionService.doAction({
-//                    type: 'ir.actions.act_window',
-//                    name: 'Approval Request',
-//                    res_model: 'approval.request',
-//                    res_id: result.approval_id,
-//                    view_mode: 'form',
-//                    views: [[false, 'form']],
-//                    target: 'current',
-//                });
-//            }
-//        } catch (error) {
-//            console.error("Error creating approval request:", error);
-//            this.notification.add(
-//                error.message || "Failed to create approval request",
-//                { type: "danger" }
-//            );
-//        }
-//    }
+    //    async _createApprovalRequest(actionType, quantity, bomLineId, componentId, rootBomId) {
+    //        try {
+    //            const result = await this.ormService.call(
+    //                "mrp.bom.line",
+    //                "create_special_po_approval",
+    //                [bomLineId, actionType, quantity, componentId, rootBomId]
+    //            );
+    //
+    //            if (result && result.approval_id) {
+    //                this.notification.add("Approval request created successfully", {
+    //                    type: "success",
+    //                });
+    //
+    //                // Open approval request
+    //                this.actionService.doAction({
+    //                    type: 'ir.actions.act_window',
+    //                    name: 'Approval Request',
+    //                    res_model: 'approval.request',
+    //                    res_id: result.approval_id,
+    //                    view_mode: 'form',
+    //                    views: [[false, 'form']],
+    //                    target: 'current',
+    //                });
+    //            }
+    //        } catch (error) {
+    //            console.error("Error creating approval request:", error);
+    //            this.notification.add(
+    //                error.message || "Failed to create approval request",
+    //                { type: "danger" }
+    //            );
+    //        }
+    //    }
 
-// JavaScript side - update the method
-async _createApprovalRequest(actionType, quantity, bomLineId, componentId, rootBomId) {
-    try {
-        const result = await this.ormService.call(
-            "mrp.bom.line",
-            "create_special_po_approval",
-            [bomLineId, actionType, quantity, componentId, rootBomId]
-        );
+    // JavaScript side - update the method
+    async _createApprovalRequest(actionType, quantity, bomLineId, componentId, rootBomId) {
+        try {
+            const result = await this.ormService.call(
+                "mrp.bom.line",
+                "create_special_po_approval",
+                [bomLineId, actionType, quantity, componentId, rootBomId]
+            );
 
-        if (result && result.error) {
-            this.notification.add(result.message, {
-                type: "danger",
-            });
-            return;
+            if (result && result.error) {
+                this.notification.add(result.message, {
+                    type: "danger",
+                });
+                return;
+            }
+
+            if (result && result.approval_id) {
+                this.notification.add("Approval request created successfully", {
+                    type: "success",
+                });
+
+                this.actionService.doAction({
+                    type: 'ir.actions.act_window',
+                    name: 'Approval Request',
+                    res_model: 'approval.request',
+                    res_id: result.approval_id,
+                    view_mode: 'form',
+                    views: [[false, 'form']],
+                    target: 'current',
+                });
+            }
+        } catch (error) {
+            console.error("Error creating approval request:", error);
+            this.notification.add(
+                error.message || "Failed to create approval request",
+                { type: "danger" }
+            );
         }
-
-        if (result && result.approval_id) {
-            this.notification.add("Approval request created successfully", {
-                type: "success",
-            });
-
-            this.actionService.doAction({
-                type: 'ir.actions.act_window',
-                name: 'Approval Request',
-                res_model: 'approval.request',
-                res_id: result.approval_id,
-                view_mode: 'form',
-                views: [[false, 'form']],
-                target: 'current',
-            });
-        }
-    } catch (error) {
-        console.error("Error creating approval request:", error);
-        this.notification.add(
-            error.message || "Failed to create approval request",
-            { type: "danger" }
-        );
     }
-}
 });

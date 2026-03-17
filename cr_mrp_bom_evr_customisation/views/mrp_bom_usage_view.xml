@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="mrp_bom_form_view_usage_inherit" model="ir.ui.view">
+        <field name="name">mrp.bom.form.usage.inherit</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Used In Root BOMs" name="usage_root_boms" invisible="not is_evr">
+                    <group>
+                        <field name="used_in_root_bom_ids_str" readonly="1"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

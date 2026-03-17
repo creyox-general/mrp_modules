@@ -45,16 +45,12 @@ class StockMove(models.Model):
     @api.constrains('product_uom_qty', 'location_id', 'product_id')
     def _check_stock_availability_internal(self):
         """Validate stock availability on save"""
-        if self.picking_id.origin:
-            return
-
-        if self.picking_id.origin and self.picking_id.origin.startswith('EVR Flow'):
-            return
-
         if self.env.context.get('bypass_custom_internal_transfer_restrictions'):
             return
 
         for move in self:
+            if move.picking_id.origin:
+                continue
             if move.picking_id.picking_type_id.code == 'internal' and move.product_id and move.product_uom_qty > 0:
                 if not move.location_id:
                     max_qty, max_location = move._get_max_available_quantity(move.product_id)

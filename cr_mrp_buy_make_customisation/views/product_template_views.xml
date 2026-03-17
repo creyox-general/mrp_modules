@@ -15,4 +15,19 @@
             </xpath>
         </field>
     </record>
+
+    <!-- Hide Internal Reference (default_code) from product_template_only_form_view -->
+    <!-- Targets only the original base field which has no class attribute. -->
+    <!-- bizzup_product_customisation adds a separate default_code with class="unique_default_code" — that is NOT hidden. -->
+    <record id="view_product_template_only_form_hide_default_code" model="ir.ui.view">
+        <field name="name">product.template.only.form.hide.default.code</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='default_code'][not(@class)]" position="attributes">
+                <attribute name="invisible">True</attribute>
+            </xpath>
+        </field>
+    </record>
+
 </odoo>

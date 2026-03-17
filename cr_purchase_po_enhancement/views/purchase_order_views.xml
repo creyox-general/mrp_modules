@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <record id="purchase_history_tree_inherit_enhancement" model="ir.ui.view">
+        <field name="name">purchase.history.list.inherit.enhancement</field>
+        <field name="model">purchase.order.line</field>
+        <field name="inherit_id" ref="purchase.purchase_history_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='date_approve']" position="after">
+                <field name="branch_id" string="Branch"/>
+                <field name="project_id" string="Project"/>
+                <field name="product_id" string="Description(product name)"/>
+            </xpath>
+        </field>
+    </record>
     <record id="view_purchase_order_form_inherit_enhancement" model="ir.ui.view">
         <field name="name">purchase.order.form.enhancement</field>
         <field name="model">purchase.order</field>
@@ -24,8 +36,9 @@
                 <field name="vendor_status_line" optional="hide"/>
                 <field name="following_status" optional="hide"/>
                 <field name="days_late" optional="hide" readonly="1" decoration-danger="days_late &lt; 0"/>
-                <field name="project_id"/>
-                <field name="following_note"/>
+                <field name="project_id" optional="show"/>
+                <field name="po_type" optional="show"/>
+                <field name="following_note" optional="hide"/>
             </xpath>
 
             <xpath expr="//field[@name='sequence']" position="after">

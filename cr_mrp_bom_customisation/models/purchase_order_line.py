@@ -19,6 +19,6 @@ class PurchaseOrderLine(models.Model):
             cfe_location = self.order_id.cfe_project_location_id
             if cfe_location:
                 move_vals['location_dest_id'] = cfe_location.id
-
+        print('moves : ',moves)
         return moves
 

@@ -45,6 +45,7 @@ class ReportBomStructureBranch(models.AbstractModel):
                 # Show component fields
                 if component_rec:
                     component_rec.quantity = data['quantity']
+                    data['branch'] = component_rec.bom_line_branch_id.branch_name
                     data['componentId'] = component_rec.id
                     data['free_to_use'] = component_rec.free_to_use
                     data['display_free_to_use'] = True
@@ -99,7 +100,8 @@ class ReportBomStructureBranch(models.AbstractModel):
                             if po_line.order_id.state != 'cancel':
                                 po_data.append({
                                     'id': po_line.order_id.id,
-                                    'name': po_line.order_id.name
+                                    'name': po_line.order_id.name,
+                                    'state': po_line.order_id.state
                                 })
 
                     if component_rec.vendor_po_ids:
@@ -107,7 +109,8 @@ class ReportBomStructureBranch(models.AbstractModel):
                             if po_line.order_id.state != 'cancel':
                                 po_data.append({
                                     'id': po_line.order_id.id,
-                                    'name': po_line.order_id.name
+                                    'name': po_line.order_id.name,
+                                    'state': po_line.order_id.state
                                 })
 
                     seen_ids = set()
@@ -118,7 +121,7 @@ class ReportBomStructureBranch(models.AbstractModel):
                             unique_po_data.append(po)
 
                     data['po_data'] = unique_po_data
-                    data['po_line_name'] = ", ".join([po['name'] for po in unique_po_data]) if unique_po_data else ""
+                    data['po_line_name'] = ", ".join([f"({po['name']})" if po.get('state') in ['draft', 'sent', 'to approve'] else po['name'] for po in unique_po_data]) if unique_po_data else ""
 
                     # Purchase group data
                     data['purchase_group_editable'] = component_rec.approval_1 and component_rec.approval_2
@@ -264,7 +267,6 @@ class ReportBomStructureBranch(models.AbstractModel):
             parent_bom, parent_product, warehouse, bom_line,
             line_quantity, level, index, product_info, ignore_stock
         )
-
         data['purchase_group_editable'] = False
 
         if not bom_line:
@@ -293,6 +295,7 @@ class ReportBomStructureBranch(models.AbstractModel):
         data['display_free_to_use'] = True
         if component_rec:
             component_rec.quantity = data['quantity']
+            data['branch'] = component_rec.bom_line_branch_id.branch_name
             data['componentId'] = component_rec.id
             data['free_to_use'] = component_rec.free_to_use
 
@@ -304,7 +307,8 @@ class ReportBomStructureBranch(models.AbstractModel):
                     if po_line.order_id.state != 'cancel':
                         po_data.append({
                             'id': po_line.order_id.id,
-                            'name': po_line.order_id.name
+                            'name': po_line.order_id.name,
+                            'state': po_line.order_id.state
                         })
 
             # Collect vendor PO lines (exclude cancelled)
@@ -313,7 +317,8 @@ class ReportBomStructureBranch(models.AbstractModel):
                     if po_line.order_id.state != 'cancel':
                         po_data.append({
                             'id': po_line.order_id.id,
-                            'name': po_line.order_id.name
+                            'name': po_line.order_id.name,
+                            'state': po_line.order_id.state
                         })
 
             # Remove duplicates based on PO id
@@ -325,7 +330,7 @@ class ReportBomStructureBranch(models.AbstractModel):
                     unique_po_data.append(po)
 
             data['po_data'] = unique_po_data
-            data['po_line_name'] = ", ".join([po['name'] for po in unique_po_data]) if unique_po_data else ""
+            data['po_line_name'] = ", ".join([f"({po['name']})" if po.get('state') in ['draft', 'sent', 'to approve'] else po['name'] for po in unique_po_data]) if unique_po_data else ""
 
             data['purchase_group_editable'] = component_rec.approval_1 and component_rec.approval_2
             is_approval = component_rec.approval_1 and component_rec.approval_2
@@ -378,7 +383,6 @@ class ReportBomStructureBranch(models.AbstractModel):
                 data['transferred'] = None
                 data['transferred_cfe'] = None
                 data['used'] = None
-
         return data
 
     # def _get_component_for_line(self, root_bom_id, bom_line, parent_bom, index):

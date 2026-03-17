@@ -42,6 +42,28 @@ class PurchaseOrderLine(models.Model):
         'project.project',
         string='Project',
     )
+    
+    po_type = fields.Selection([
+        ('mrp', 'MRP'),
+        ('urgt', 'URGT'),
+        ('min', 'MIN'),
+        ('mixed', 'Mixed'),
+    ], string='PO Type', store=True)
+    
+    extra_qty = fields.Float(string='Extra Qty')
+    manufacture_internal_ref = fields.Char(
+        related='manufacturer_id.manufacture_internal_ref',
+        string='INTERNAL REF of selected MFG',
+        store=True
+    )
+
+    display_date_po = fields.Date(string='Display Date', related='order_id.display_date_po', store=True)
+    categ_id = fields.Many2one('product.category', related='product_id.categ_id', store=True, string='Product Category')
+    product_document_count = fields.Integer(compute='_compute_product_document_count', string='Document Count')
+    
+    def _compute_product_document_count(self):
+        for line in self:
+            line.product_document_count = len(line.product_id.product_document_ids) if line.product_id else 0
 
     split_order = fields.Boolean(string="Split RFQ?")
     buyer_po = fields.Many2one('res.users','Buyer PO',compute='_compute_buyer_po',
@@ -83,7 +105,7 @@ class PurchaseOrderLine(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        """Override create to ensure Free Location is set for replenishment lines"""
+        """Override create to ensure Free Location is set for replenishment lines and po_type is inherited"""
         for vals in vals_list:
             # Check if this is from replenishment (has move_dest_ids or specific origin)
             if 'move_dest_ids' in vals or vals.get('origin_returned_move_id'):
@@ -100,8 +122,16 @@ class PurchaseOrderLine(models.Model):
                     if free_location:
                         vals['location_final_id'] = free_location.id
 
+            # Set po_type from order if not explicitly set
+            if not vals.get('po_type') and vals.get('order_id'):
+                order = self.env['purchase.order'].browse(vals.get('order_id'))
+                if order.exists():
+                    vals['po_type'] = order.po_type
+
         lines = super(PurchaseOrderLine, self).create(vals_list)
-        for line in lines:
+        for line, vals in zip(lines, vals_list):
+            if 'branch_id' in vals or line.branch_id:
+                print(f">>> DEBUG PO LINE CREATE: ID={line.id} Product={line.product_id.name} Branch={line.branch_id.display_name if line.branch_id else 'None'} PO Type={line.po_type}")
             line._auto_update_vendor_status()
         return lines
 
@@ -187,4 +217,98 @@ class PurchaseOrderLine(models.Model):
                     line.days_late = -diff
                 if line.qty_received > 0 and line.days_late == 0:
                     line.vendor_status_line = 'confirmed'
+
+    def action_merge_lines(self):
+        """
+        Merge selected PO lines into a new Purchase Order.
+        - Create exactly ONE new PO using the vendor and currency of the first selected line.
+        - Move ALL selected lines to this single PO.
+        - If any line is MRP, set WH/Project Location and disable summing.
+        - Cancel source POs if they become empty.
+        """
+        if not self:
+            return False
+
+        if any(line.state not in ['draft', 'sent'] for line in self):
+            raise models.ValidationError(_("Only lines in RFQ or Sent state can be merged."))
+
+        lines = self
+        source_pos = lines.mapped('order_id')
+        
+        # Determine if MRP is involved (using MTO Bom name pattern as a proxy if field exists, plus po_type)
+        is_mrp_involved = any(line.po_type == 'mrp' or line.order_id.po_type == 'mrp' for line in lines)
+        # Check if EVR components are present
+        if not is_mrp_involved:
+             is_mrp_involved = any(hasattr(line, 'name_mto_bom') and line.name_mto_bom and 'EVR' in line.name_mto_bom for line in lines)
+
+        base_line = lines[0]
+        base_order = base_line.order_id
+
+        po_vals = {
+            'partner_id': base_line.partner_id.id,
+            'currency_id': base_line.currency_id.id,
+            'company_id': base_order.company_id.id,
+            'picking_type_id': base_order.picking_type_id.id,
+            'origin': ', '.join(filter(None, set(source_pos.mapped('origin')))),
+            'is_merged': True,
+            'mrp_involved': is_mrp_involved,
+        }
+
+        # Set PO Type for the new header
+        types = set(lines.mapped('po_type')) - {False}
+        if len(types) == 1:
+            po_vals['po_type'] = list(types)[0]
+        elif len(types) > 1:
+            po_vals['po_type'] = 'mixed'
+
+        if is_mrp_involved:
+            project_loc = self.env['stock.location'].search([
+                ('complete_name', '=', 'WH/Project Location')
+            ], limit=1)
+            if project_loc:
+                po_vals['cfe_project_location_id'] = project_loc.id
+
+        new_po = self.env['purchase.order'].create(po_vals)
+
+        for line in lines:
+            merge_allowed = not is_mrp_involved
+            source_po_type = line.po_type or line.order_id.po_type
+            
+            existing_line = False
+            if merge_allowed:
+                existing_line = new_po.order_line.filtered(
+                    lambda l: l.display_type not in ['line_note', 'line_section'] and
+                    l.product_id == line.product_id and
+                    l.product_uom == line.product_uom and
+                    l.price_unit == line.price_unit and
+                    l.component_branch_id == line.component_branch_id and
+                    l.po_type == source_po_type
+                )
+            
+            if existing_line:
+                existing_line.product_qty += line.product_qty
+                line.unlink()
+            else:
+                line.po_type = source_po_type
+                line.order_id = new_po.id
+
+        # Post messages and handle source POs
+        for po in source_pos:
+            if not po.exists():
+                continue
+            if not po.order_line:
+                po.button_cancel()
+            else:
+                po.message_post(body=_("Some lines moved to merged RFQ %s", new_po._get_html_link()))
+        
+        new_po.message_post(body=_("RFQ created by merging lines from %s", ", ".join(source_pos.mapped('name'))))
+
+        return {
+            'name': _('Merged Purchase Order'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'purchase.order',
+            'res_id': new_po.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
 

@@ -8,11 +8,11 @@ patch(BomOverviewDisplayFilter.prototype, {
     setup() {
         super.setup();
         this.displayOptions.cfeQuantity = _t('CFE Quantity');
-        this.displayOptions.moInternalRef = _t('MO ref');
+        this.displayOptions.moInternalRef = _t('MFG P/N');
         this.displayOptions.lli = _t('LLI');
         this.displayOptions.approval1 = _t('Approval 1');
         this.displayOptions.approval2 = _t('Approval 2');
-        this.displayOptions.defaultCode = _t('Internal Reference');
+        this.displayOptions.defaultCode = _t('Everest PN');
         this.displayOptions.oldEverestPn = _t('Old Everest PN');
         this.displayOptions.approveToManufacture = _t('Approve to Manufacture');
         this.displayOptions.purchaseGroup = _t('Purchase Group');
@@ -20,6 +20,7 @@ patch(BomOverviewDisplayFilter.prototype, {
         this.displayOptions.displayCost = _t('Display Cost');
         this.displayOptions.customerRef = _t('Customer Ref');
         this.displayOptions.poLineId = _t('Related PO Line');
+        this.displayOptions.images = _t('Images');
     },
 });
 
@@ -41,6 +42,7 @@ patch(BomOverviewDisplayFilter, {
             displayCost: Boolean,
             customerRef: Boolean,
             poLineId: Boolean,
+            images: Boolean,
         },
     },
 });

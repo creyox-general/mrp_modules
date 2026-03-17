@@ -5,6 +5,7 @@
         <field name="model">mrp.bom</field>
         <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
         <field name="arch" type="xml">
+        <!-- MOVED TO BOM OVERVIEW CONTROL PANEL
             <xpath expr="//div[@class='oe_button_box']" position="inside">
                 <button name="action_run_purchase_flow_now"
                         type="object"
@@ -12,9 +13,14 @@
                         invisible="not is_evr"
                         class="oe_highlight"/>
             </xpath>
+        -->
 
             <xpath expr="//field[@name='project_id']" position="after">
                 <field name="last_flow_run" readonly="1" invisible="not is_evr"/>
+            </xpath>
+
+            <xpath expr="//button[@name='%(mrp.action_report_mrp_bom)d']" position="attributes">
+                <attribute name="invisible">not is_evr</attribute>
             </xpath>
         </field>
     </record>

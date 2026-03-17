@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'MRP Buy/Make Customisation',
-    'version': '18.0.7.0.0',
+    'version': '18.0.0.13',
     'category': 'Manufacturing',
     'summary': 'Add Buy/Make selection in BOM overview for products',
     'description': """

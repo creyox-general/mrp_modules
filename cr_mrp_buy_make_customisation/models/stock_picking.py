@@ -7,25 +7,6 @@ class StockPicking(models.Model):
     root_bom_id = fields.Many2one('mrp.bom', string='Bom')
 
 
-    def button_validate(self):
-        res = super().button_validate()
-
-        for picking in self:
-            if picking.picking_type_id.code != 'internal' or not picking.origin:
-                continue
-
-            mo = self._get_related_mo(picking.origin)
-            if not mo:
-                continue
-
-            if picking.picking_type_id.name == 'Pick Components':
-                self._handle_pick_components(picking, mo)
-
-            elif picking.picking_type_id.name == 'Store Finished Product':
-                self._handle_store_finished_product(picking, mo)
-                self.reset_values(picking,mo)
-
-        return res
 
     # ---------------------------------------------------------
     # Helper Methods

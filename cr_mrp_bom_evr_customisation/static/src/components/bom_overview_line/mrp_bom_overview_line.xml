@@ -6,7 +6,7 @@
 
 
         <xpath expr="//td[@name='td_mrp_bom']" position="before">
-             <td class="text-center" style="width: 50px;">
+             <td t-if="props.showOptions.images" class="text-center" style="width: 50px;">
                 <t t-if="data.product_id">
                      <img t-att-src="'/web/image/product.product/' + data.product_id + '/image_128'"
                           style="max-height:32px; max-width:32px; border-radius: 4px; cursor: pointer;"
@@ -75,7 +75,8 @@
                            t-model="data.cfe_quantity"
                            placeholder="CFE Qty"
                            style="width: 80px; margin: 0 auto;"
-                           t-on-blur="onCfeQuantityChange"/>
+                           t-on-focus="onCfeFocus"
+                           t-on-input="onCfeQuantityChange"/>
                 <span t-elif="data.has_cfe_quantity"
                       class="badge badge-info bg-info text-white">
                         CFE: <t t-esc="data.cfe_quantity"/>
@@ -141,11 +142,28 @@
             <td t-if="data.is_evr and props.showOptions.poLineId" class="text-center">
                 <t t-if="data.po_data and data.po_data.length > 0">
                     <t t-foreach="data.po_data" t-as="po" t-key="po.id">
-                        <span class="text-primary"
+                        <span t-attf-class="{{ (!data.approval_1 || !data.approval_2) and !['draft', 'sent', 'to approve', 'cancel'].includes(po.state) ? 'text-danger fw-bold' : 'text-primary' }}"
                               t-on-click="(ev) => this.onPoClick(po.id)"
-                              style="cursor: pointer; text-decoration: none;"
-                              t-esc="po.name"/>
+                              style="cursor: pointer; text-decoration: none;">
+                            <t t-if="['draft', 'sent', 'to approve'].includes(po.state)">(<t t-esc="po.name"/>)</t>
+                            <t t-else="" t-esc="po.name"/>
+                        </span>
                         <t t-if="!po_last">, </t>
+                    </t>
+                </t>
+                <span t-else="" class="text-muted"></span>
+            </td>
+
+            <td t-if="data.is_evr" class="text-center">
+                <t t-if="data.mo_data and data.mo_data.length > 0">
+                    <t t-foreach="data.mo_data" t-as="mo" t-key="mo.id">
+                        <span class="text-primary"
+                              t-on-click="(ev) => this.onMoClick(mo.id)"
+                              style="cursor: pointer; text-decoration: none;">
+                            <t t-if="mo.state == 'draft'">(<t t-esc="mo.name"/>)</t>
+                            <t t-else="" t-esc="mo.name"/>
+                        </span>
+                        <t t-if="!mo_last">, </t>
                     </t>
                 </t>
                 <span t-else="" class="text-muted"></span>

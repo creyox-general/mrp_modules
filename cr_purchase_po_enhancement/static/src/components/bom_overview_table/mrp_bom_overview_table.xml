@@ -5,10 +5,9 @@
    t-name="cr_purchase_po_enhancement.BomOverviewAddBranchColumn">
 
    <xpath expr="//th[@name='th_mrp_bom_h']" position="after">
-            <th t-if="data.is_evr" class="text-center"></th>
+            <th t-if="data.is_evr and showSpecialPo" class="text-center">Special PO</th>
    </xpath>
 
 
 </t>
 </templates>
-

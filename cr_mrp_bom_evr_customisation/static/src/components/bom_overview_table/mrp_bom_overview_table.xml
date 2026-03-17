@@ -4,6 +4,10 @@
    t-inherit-mode="extension"
    t-name="cr_mrp_bom_evr_customisation.BomOverviewAddBranchColumn">
 
+    <xpath expr="//th[@name='th_mrp_bom_h']" position="replace">
+         <th name="th_mrp_bom_h">Description </th>
+    </xpath>
+
             <xpath expr="//h6[@t-if='data.bom_code']" position="after">
                 <div style="display: none !important;">
                     <h2>
@@ -15,10 +19,10 @@
             </xpath>
 
             <xpath expr="//th[@name='th_mrp_bom_h']" position="before">
-                <th class="text-center" title="Image">Img</th>
-                <th t-if="showDefaultCode" class="text-center" title="Internal Reference">Internal Ref</th>
+                <th t-if="showImages" class="text-center" title="Image">Img</th>
+                <th t-if="showDefaultCode" class="text-center" title="Internal Reference">Everest PN</th>
                 <th t-if="showOldEverestPn" class="text-center" title="Old Everest Part Number">Old Everest PN</th>
-                <th t-if="data.is_evr and showMoInternalRef" class="text-center" title="Mo Internal Ref">MO ref</th>
+                <th t-if="data.is_evr and showMoInternalRef" class="text-center" title="Mo Internal Ref">MFG P/N</th>
             </xpath>
 
             <xpath expr="//th[@name='th_mrp_bom_h']" position="after">
@@ -31,7 +35,8 @@
                  <th t-if="data.is_evr and showApproval1" class="text-center approval1">Approval 1</th>
                  <th t-if="data.is_evr and showApproval2" class="text-center approval2">Approval 2</th>
                  <th t-if="data.is_evr and showCustomerRef" class="text-center">Customer Ref</th>
-                 <th t-if="data.is_evr and showPoLineId" class="text-center">Related PO Line</th>
+                 <th t-if="data.is_evr and showPoLineId" class="text-center">Related POs</th>
+                 <th t-if="data.is_evr" class="text-center" title="Manufacturing Order">Related MOs</th>
 
                  <t t-if="data.is_evr and showPurchaseGroup">
                      <th class="text-center">To Order</th>

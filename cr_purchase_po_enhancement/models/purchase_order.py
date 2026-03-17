@@ -14,6 +14,7 @@ class PurchaseOrder(models.Model):
         ('mrp', 'MRP'),
         ('urgt', 'URGT'),
         ('min', 'MIN'),
+        ('mixed', 'Mixed'),
     ], string='PO Type')
 
     vendor_status = fields.Selection([
@@ -21,6 +22,9 @@ class PurchaseOrder(models.Model):
         ('delayed', 'Delayed'),
         ('pending', 'PENDING RESPONSE'),
     ], string='Vendor Status', compute='_compute_vendor_status', store=True)
+
+    is_merged = fields.Boolean(string='Is Merged', default=False)
+    mrp_involved = fields.Boolean(string='MRP Involved', default=False)
 
     partner_tag_ids = fields.Many2many(
         'res.partner.category',
@@ -77,15 +81,14 @@ class PurchaseOrder(models.Model):
 
         for order in self:
             today = fields.Date.context_today(order)
-            if order.po_type in ['mrp', 'min']:
+            if order.po_type == 'mrp':
                 today_wd = today.weekday()
                 days_ahead = target_weekday - today_wd
                 if days_ahead <= 0:
                     days_ahead += 7
                 order.display_date_po = today + timedelta(days=days_ahead)
-
-            elif order.po_type == 'urgt':
-                order.display_date_po = today
+            else:
+                order.display_date_po = False
 
     def _inverse_display_date(self):
         for order in self:

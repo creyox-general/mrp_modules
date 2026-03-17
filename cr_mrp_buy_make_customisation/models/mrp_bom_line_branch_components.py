@@ -466,21 +466,22 @@ class MrpBomLine(models.Model):
             is_mech_product
         )
 
+        # Filter quants to only those with available quantity (quantity - reserved_quantity) > 0
         all_quants = StockQuant.search([
             ("product_id", "=", bom_line.product_id.id),
             ("owner_id", "=", customer.id),
             ("quantity", ">", 0),
             ("location_id", '!=', self.location_id.id)
-        ])
-        _logger.info("Found all_quants=%s", all_quants.ids)
+        ]).filtered(lambda q: (q.quantity - q.reserved_quantity) > 0)
+        _logger.info("Found all_quants with availability=%s", all_quants.ids)
 
         tapy_quants = []
         free_quants = []
 
         for quant in all_quants:
             _logger.info(
-                "Evaluating quant=%s location=%s qty=%s",
-                quant.id, quant.location_id.id, quant.quantity
+                "Evaluating quant=%s location=%s qty=%s reserved=%s",
+                quant.id, quant.location_id.id, quant.quantity, quant.reserved_quantity
             )
 
             if is_mech_product and self._is_tapy_location(quant.location_id):
@@ -494,14 +495,14 @@ class MrpBomLine(models.Model):
                     free_quants.append(quant)
                     _logger.info("Added quant %s to free_quants", quant.id)
 
-        # Sort each list by quantity descending
-        tapy_quants.sort(key=lambda q: q.quantity, reverse=True)
-        free_quants.sort(key=lambda q: q.quantity, reverse=True)
+        # Sort each list by AVAILABLE quantity descending
+        tapy_quants.sort(key=lambda q: (q.quantity - q.reserved_quantity), reverse=True)
+        free_quants.sort(key=lambda q: (q.quantity - q.reserved_quantity), reverse=True)
 
         _logger.info(
             "TAPY quants (sorted)=%s FREE quants (sorted)=%s",
-            [(q.id, q.quantity) for q in tapy_quants],
-            [(q.id, q.quantity) for q in free_quants]
+            [(q.id, q.quantity - q.reserved_quantity) for q in tapy_quants],
+            [(q.id, q.quantity - q.reserved_quantity) for q in free_quants]
         )
 
         total_qty = 0
@@ -515,10 +516,11 @@ class MrpBomLine(models.Model):
                 if remaining <= 0:
                     break
 
-                transfer_qty = min(quant.quantity, remaining)
+                available_qty = quant.quantity - quant.reserved_quantity
+                transfer_qty = min(available_qty, remaining)
                 _logger.info(
-                    "Creating TAPY transfer | quant=%s qty=%s transfer_qty=%s",
-                    quant.id, quant.quantity, transfer_qty
+                    "Creating TAPY transfer | quant=%s available=%s transfer_qty=%s",
+                    quant.id, available_qty, transfer_qty
                 )
 
                 picking = self._create_single_internal_transfer(customer, False, quant.location_id, transfer_qty)
@@ -548,10 +550,11 @@ class MrpBomLine(models.Model):
                 if remaining <= 0:
                     break
 
-                transfer_qty = min(quant.quantity, remaining)
+                available_qty = quant.quantity - quant.reserved_quantity
+                transfer_qty = min(available_qty, remaining)
                 _logger.info(
-                    "Creating FREE transfer | quant=%s qty=%s transfer_qty=%s",
-                    quant.id, quant.quantity, transfer_qty
+                    "Creating FREE transfer | quant=%s available=%s transfer_qty=%s",
+                    quant.id, available_qty, transfer_qty
                 )
 
                 picking = self._create_single_internal_transfer(customer, False, quant.location_id, transfer_qty)
@@ -884,7 +887,7 @@ class MrpBomLine(models.Model):
             ("owner_id", "=", False),
             ("quantity", ">", 0),
             ("location_id", '!=', self.location_id.id)
-        ])
+        ]).filtered(lambda q: (q.quantity - q.reserved_quantity) > 0)
         _logger.info("Found all_quants=%s", all_quants.ids)
 
         tapy_quants = []
@@ -909,8 +912,10 @@ class MrpBomLine(models.Model):
                     _logger.info("Added quant %s to free_quants", quant.id)
 
         # Sort each list by quantity descending
-        tapy_quants.sort(key=lambda q: q.quantity, reverse=True)
-        free_quants.sort(key=lambda q: q.quantity, reverse=True)
+        # tapy_quants.sort(key=lambda q: q.quantity, reverse=True)
+        # free_quants.sort(key=lambda q: q.quantity, reverse=True)
+        tapy_quants.sort(key=lambda q: (q.quantity - q.reserved_quantity), reverse=True)
+        free_quants.sort(key=lambda q: (q.quantity - q.reserved_quantity), reverse=True)
 
         _logger.info(
             "TAPY quants (sorted)=%s FREE quants (sorted)=%s",

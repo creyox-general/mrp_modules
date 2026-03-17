@@ -10,6 +10,7 @@ class ProductTemplate(models.Model):
     manufacture_purchase = fields.Selection([
         ('buy', 'BUY'),
         ('buy_make', 'BUY/MAKE'),
+        ('empty','Empty')
     ], string='Manufacture/Purchase', tracking=True)
 
     show_manufacture_purchase = fields.Boolean(

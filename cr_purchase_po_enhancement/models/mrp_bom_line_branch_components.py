@@ -31,14 +31,19 @@ class MrpBomLineBranchComponents(models.Model):
             if existing_line.product_qty != quantity:
                 existing_line.product_qty = quantity
                 self.customer_po_ids = [(4, existing_line.id)]
+                self._send_notification(
+                    "Purchase Order Updated (CFE)",
+                    f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
+                    "success"
+                )
 
             # self.cr_bom_line_id.customer_po_line_id = POLine.id
 
-            self._send_notification(
-                "Purchase Order Updated (CFE)",
-                f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
-                "success"
-            )
+            # self._send_notification(
+            #     "Purchase Order Updated (CFE)",
+            #     f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
+            #     "success"
+            # )
 
         else:
             company = self.env.company
@@ -54,16 +59,29 @@ class MrpBomLineBranchComponents(models.Model):
 
 
             if not po:
+                location = self.root_bom_id.cfe_project_location_id
+                # Truncate to project level if possible
+                if location:
+                    curr = location
+                    while curr.location_id:
+                        if curr.location_id.name == 'Project Location':
+                            location = curr
+                            break
+                        curr = curr.location_id
+
                 po = PO.create({
                     "partner_id": customer.id,
                     "bom_id": self.root_bom_id.id,
                     "origin": f"EVR Flow - {self.root_bom_id.display_name}",
-                    "cfe_project_location_id": self.root_bom_id.cfe_project_location_id.id,
+                    "cfe_project_location_id": location.id if location else False,
                     "state":'draft',
                     "po_type":"mrp",
                     "cfe": True,
                 })
 
+
+            analytic_account = self.root_bom_id.project_id.account_id
+            print('>>1analytic_account : ',analytic_account)
 
             POLine.create({
                 "order_id": po.id,
@@ -73,6 +91,8 @@ class MrpBomLineBranchComponents(models.Model):
                 "price_unit": 0.0,
                 "date_planned": fields.Datetime.now(),
                 "component_branch_id": self.id,
+                "branch_id": self.bom_line_branch_id.id,
+                "distribution_analytic_account_ids": [(6, 0, [analytic_account.id])] if analytic_account else False,
                 "bom_line_ids": [(6, 0, [self.cr_bom_line_id.id])],
                 "bom_id":self.root_bom_id.id,
                 "project_id":self.root_bom_id.project_id.id,
@@ -127,13 +147,18 @@ class MrpBomLineBranchComponents(models.Model):
             if existing_line.product_qty != quantity:
                 existing_line.product_qty = quantity
                 _logger.info("Updated existing PO line qty to %s", quantity)
+                self._send_notification(
+                    "Purchase Order Updated (Non - CFE)",
+                    f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
+                    "success"
+                )
 
             # self.cr_bom_line_id.po_line_id = POLine.id
-            self._send_notification(
-                "Purchase Order Updated (Non - CFE)",
-                f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
-                "success"
-            )
+            # self._send_notification(
+            #     "Purchase Order Updated (Non - CFE)",
+            #     f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
+            #     "success"
+            # )
         else:
             # Find or create PO
             po = PO.search([
@@ -148,17 +173,31 @@ class MrpBomLineBranchComponents(models.Model):
 
 
             if not po:
+                location = self.root_bom_id.cfe_project_location_id
+                # Truncate to project level if possible
+                if location:
+                    curr = location
+                    while curr.location_id:
+                        if curr.location_id.name == 'Project Location':
+                            location = curr
+                            break
+                        curr = curr.location_id
+
                 po = PO.create({
                     "partner_id": vendor.partner_id.id,
                     "bom_id": self.root_bom_id.id,
                     "origin": f"EVR Flow - {self.root_bom_id.display_name}",
-                    "cfe_project_location_id": self.root_bom_id.cfe_project_location_id.id,
+                    "cfe_project_location_id": location.id if location else False,
                     "state": 'draft',
                     "po_type": "mrp",
                 })
                 _logger.info("Created new PO: %s", po.id)
 
             price = vendor.price or bom_line.product_id.list_price
+
+            
+            analytic_account = self.root_bom_id.project_id.account_id
+            print('>>2analytic_account : ', analytic_account)
 
             new_line = POLine.create({
                 "order_id": po.id,
@@ -168,6 +207,8 @@ class MrpBomLineBranchComponents(models.Model):
                 "price_unit": price,
                 "date_planned": fields.Datetime.now(),
                 "component_branch_id": self.id,
+                "branch_id": self.bom_line_branch_id.id,
+                "distribution_analytic_account_ids": [(6, 0, [analytic_account.id])] if analytic_account else False,
                 "bom_line_ids": [(6, 0, [bom_line.id])],
                 "bom_id": self.root_bom_id.id,
                 "project_id": self.root_bom_id.project_id.id,

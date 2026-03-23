@@ -8,7 +8,9 @@
             <xpath expr="//field[@name='date_approve']" position="after">
                 <field name="branch_id" string="Branch"/>
                 <field name="project_id" string="Project"/>
-                <field name="product_id" string="Description(product name)"/>
+                <field name="manufacture_internal_ref" string="mfg/pn"/>
+                <field name="product_description_variant" string="Description(product name)"/>
+                <button name="action_open_product" type="object" icon="fa-external-link" title="Open Product" class="btn-link"/>
             </xpath>
         </field>
     </record>

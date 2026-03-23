@@ -9,12 +9,44 @@ _logger = logging.getLogger(__name__)
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
+    # ----- Branch / Component Links -----
+    mrp_bom_line_branch_id = fields.Many2one(
+        'mrp.bom.line.branch',
+        string='BOM Branch',
+        ondelete='set null',
+        index=True,
+    )
+    mrp_bom_line_branch_component_id = fields.Many2one(
+        'mrp.bom.line.branch.components',
+        string='BOM Branch Component',
+        ondelete='set null',
+        index=True,
+    )
+
+    # Computed critical: component takes priority over branch
     critical = fields.Boolean(
         string='Critical',
-        default=False,
-        help='This component is critical'
+        compute='_compute_critical',
+        store=True,
+        help='Critical status sourced from branch component or branch record',
     )
-    mrp_bom_line_id = fields.Many2one('mrp.bom.line',string='BOM Line')
+    mrp_bom_line_id = fields.Many2one('mrp.bom.line', string='BOM Line')
+
+    @api.depends(
+        'mrp_bom_line_branch_component_id',
+        'mrp_bom_line_branch_component_id.critical',
+        'mrp_bom_line_branch_id',
+        'mrp_bom_line_branch_id.critical',
+    )
+    def _compute_critical(self):
+        for move in self:
+            if move.mrp_bom_line_branch_component_id:
+                move.critical = move.mrp_bom_line_branch_component_id.critical
+            elif move.mrp_bom_line_branch_id:
+                move.critical = move.mrp_bom_line_branch_id.critical
+            else:
+                move.critical = False
+
 
 
     @api.model

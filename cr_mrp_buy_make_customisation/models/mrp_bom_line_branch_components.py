@@ -11,7 +11,7 @@ class MrpBomLine(models.Model):
 
     critical = fields.Boolean(
         string='Critical',
-        related='cr_bom_line_id.critical',
+        default=False,
         store=True,
         help='This component is critical'
     )
@@ -22,6 +22,30 @@ class MrpBomLine(models.Model):
         store=True,
         help='Quantity lost/damaged'
     )
+
+    buy_make_selection = fields.Selection([
+        ('buy', 'BUY'),
+        ('make', 'MAKE')
+    ], string='Selection', default='buy')
+
+    def action_change_buy_make_selection(self, new_value):
+        """
+        Delegate to the stable Atomic Transition Proxy on the BOM model.
+        This avoids the "Record does not exist" error when unlinking self.
+        """
+        self.ensure_one()
+        _logger.info(f"Delegating component transition for {self.id} to BOM proxy")
+        
+        root_bom = self.root_bom_id
+        if not root_bom:
+            return {'success': False, 'message': 'Root BOM not found'}
+
+        return root_bom.action_transition_bom_line(
+            line_id=self.cr_bom_line_id.id,
+            record_model=self._name,
+            record_id=self.id,
+            new_value=new_value
+        )
 
     @api.depends('used', 'to_transfer')
     def _compute_lost(self):
@@ -159,9 +183,8 @@ class MrpBomLine(models.Model):
         if self.bom_line_branch_id and self.bom_line_branch_id.used > 0:
             return
 
-        # Skip if BUY/MAKE product without selection
-        if (bom_line.product_id.manufacture_purchase == 'buy_make' and
-                not bom_line.buy_make_selection):
+        # Check native buy_make_selection (preventing processing if mistakenly set to make)
+        if bom_line.product_id.manufacture_purchase == 'buy_make' and self.buy_make_selection != 'buy':
             return
 
         # # Skip if MAKE is selected (treat as sub-BOM, not component)

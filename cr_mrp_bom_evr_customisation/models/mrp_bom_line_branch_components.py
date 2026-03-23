@@ -205,10 +205,21 @@ class MrpBomLineBranchComponents(models.Model):
                             if not buyer:
                                 continue
                             
-                            buyer_name = f"@{buyer.partner_id.name}" if buyer.partner_id else ""
-                            title = _("BOM Approval Removed")
-                            body = _("%s ATTENTION: Approval for component %s has been REMOVED in the BOM Overview for PO %s. Please review and remove this line if no longer needed.") % (buyer_name, po_line.product_id.display_name, po_line.order_id.name)
+                            # HTML mention for high visibility in chatter
+                            mention = Markup('<a href="#" data-oe-model="res.partner" data-oe-id="%s">@%s</a> ') % (buyer.partner_id.id, buyer.partner_id.name)
+                            body = mention + _("ATTENTION: Approval for component %s has been REMOVED in the BOM Overview for PO %s. Please review and remove this line if no longer needed.") % (po_line.product_id.display_name, po_line.order_id.name)
                             
+                            # Post to Chatter (as requested by client)
+                            po_line.order_id.message_post(
+                                body=body,
+                                partner_ids=buyer.partner_id.ids,
+                                message_type='comment',
+                                subtype_xmlid='mail.mt_comment'
+                            )
+
+                            # Previous direct notification logic (commented out per client request)
+                            """
+                            title = _("BOM Approval Removed")
                             # A. Real-time Toast
                             self.env['bus.bus']._sendone(buyer.partner_id, 'simple_notification', {
                                 'title': title,
@@ -223,6 +234,7 @@ class MrpBomLineBranchComponents(models.Model):
                                 body=body,
                                 subject=title,
                             )
+                            """
                     
                     # 2. Delete draft PO lines AFTER notification
                     if draft_lines:

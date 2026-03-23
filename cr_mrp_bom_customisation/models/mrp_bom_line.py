@@ -21,3 +21,7 @@ class MrpBomLine(models.Model):
         store=True
     )
 
+    # Placeholder for view compatibility (store=False = no DB column required)
+    critical = fields.Boolean(string='Critical', default=False, store=False)
+
+

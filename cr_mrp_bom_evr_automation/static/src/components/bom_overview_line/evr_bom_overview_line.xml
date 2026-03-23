@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<templates xml:space="preserve">
-    <t t-inherit="mrp.BomOverviewLine" t-inherit-mode="extension">
-        <!-- Resizing is now handled dynamically via JS mouse events on TH/TR edges -->
-    </t>
-</templates>

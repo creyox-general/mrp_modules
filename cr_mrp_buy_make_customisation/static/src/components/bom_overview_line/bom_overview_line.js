@@ -59,31 +59,37 @@ patch(BomOverviewLine.prototype, {
     //         event.target.value = this.props.data.buy_make_selection || '';
     //     }
     // },
+    async onBuyMakeChange(event) {
+        const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
+        const componentIdStr = event.target.getAttribute('data-component-id');
+        const branchIdStr = event.target.getAttribute('data-branch-id');
+        
+        // Parse IDs safely (NaN if empty)
+        const componentId = componentIdStr ? parseInt(componentIdStr) : null;
+        const branchId = branchIdStr ? parseInt(branchIdStr) : null;
+        
+        const newValue = event.target.value;
+        const rootBomId = this.props.data.root_bom_id;
 
-async onBuyMakeChange(event) {
-    const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
-    const newValue = event.target.value;
-    const rootBomId = this.props.data.root_bom_id;
+        if (!newValue) return;
 
-    if (!bomLineId || !newValue) return;
+        try {
+            // Priority: If it has a component ID, it IS a component. 
+            // Components also have branch_ids (their parent), so we MUST check componentId first.
+            const recordId = componentId || branchId;
+            const model = componentId ? "mrp.bom.line.branch.components" : "mrp.bom.line.branch";
+            
+            // Call the ATOMIC PROXY on the ROOT BOM model for stability
+            const results = await this.ormService.call(
+                "mrp.bom",
+                "action_transition_bom_line",
+                [rootBomId, bomLineId, model, recordId, newValue]
+            );
 
-    try {
-        // Call the action method that returns results
-        const results = await this.ormService.call(
-            "mrp.bom.line",
-            "action_change_buy_make_selection",
-            [[bomLineId], newValue],
-            {
-                context: {
-                    root_bom_id: rootBomId
-                }
+            if (!results || !results.success) {
+                this.notification.add("Failed to update selection", { type: "danger" });
+                return;
             }
-        );
-
-        if (!results.success) {
-            this.notification.add("Failed to update selection", { type: "danger" });
-            return;
-        }
 
         // Update local data
         this.props.data.buy_make_selection = newValue;
@@ -179,67 +185,56 @@ async onBuyMakeChange(event) {
 },
 
         async onCriticalChange(event) {
-        const bomLineId = parseInt(event.target.getAttribute('data-bom-line-id'));
+        const componentId = parseInt(event.target.getAttribute('data-component-id')) || null;
+        const branchId = parseInt(event.target.getAttribute('data-branch-id')) || null;
         const newValue = event.target.checked;
         const oldValue = this.props.data.critical;
 
-        // Prevent change if already approved to manufacture
-//        if (this.props.data.approve_to_manufacture) {
-//            event.target.checked = oldValue;
-//            this.notification.add(
-//                "Cannot change critical status after approval to manufacture",
-//                {
-//                    type: "warning",
-//                    title: "Action Not Allowed"
-//                }
-//            );
-//            return;
-//        }
+        // Priority: component rows have both IDs — always prefer componentId
+        const recordId = componentId || branchId;
+        const model = componentId
+            ? "mrp.bom.line.branch.components"
+            : "mrp.bom.line.branch";
+
+        if (!recordId) {
+            this.notification.add(
+                "Cannot update: no branch or component record found for this row.",
+                { type: "danger", title: "Update Failed" }
+            );
+            event.target.checked = oldValue;
+            return;
+        }
 
         try {
-            // Update the BOM line in backend
             const result = await this.ormService.call(
-                "mrp.bom.line",
+                model,
                 "write",
-                [[bomLineId], { critical: newValue }]
+                [[recordId], { critical: newValue }]
             );
 
             if (result) {
-                // Update local data
                 this.props.data.critical = newValue;
-
-                // Show success notification
                 this.notification.add(
                     newValue
                         ? `${this.props.data.display_name} marked as Critical`
                         : `${this.props.data.display_name} unmarked as Critical`,
-                    {
-                        type: "success",
-                        title: "Critical Status Updated"
-                    }
+                    { type: "success", title: "Critical Status Updated" }
                 );
-
-                // Log for debugging
-                console.log(`BOM Line ${bomLineId} critical status changed to ${newValue}`);
             } else {
                 throw new Error("Write operation returned false");
             }
 
         } catch (error) {
-            // Revert checkbox on error
             event.target.checked = oldValue;
             this.props.data.critical = oldValue;
-
             this.notification.add(
                 "Failed to update critical status. Please try again.",
-                {
-                    type: "danger",
-                    title: "Update Failed"
-                }
+                { type: "danger", title: "Update Failed" }
             );
             console.error("Error updating critical status:", error);
         }
     },
+
 
     /**
      * Check if critical checkbox should be disabled

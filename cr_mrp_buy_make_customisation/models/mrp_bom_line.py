@@ -9,25 +9,10 @@ _logger = logging.getLogger(__name__)
 class MrpBomLine(models.Model):
     _inherit = 'mrp.bom.line'
 
-    buy_make_selection = fields.Selection([
-        ('buy', 'BUY'),
-        ('make', 'MAKE'),
-    ], string='BUY/MAKE Selection', tracking=True)
-
-    show_buy_make_column = fields.Boolean(
-        compute='_compute_show_buy_make_column',
-        store=False
-    )
 
     is_buy_make_product = fields.Boolean(
         compute='_compute_is_buy_make_product',
         store=True
-    )
-
-    critical = fields.Boolean(
-        string='Critical',
-        default=False,
-        help='Mark this component as critical'
     )
 
     @api.depends('product_id', 'product_id.manufacture_purchase')
@@ -35,13 +20,6 @@ class MrpBomLine(models.Model):
         for line in self:
             line.is_buy_make_product = line.product_id.manufacture_purchase == 'buy_make'
 
-    def _compute_show_buy_make_column(self):
-        for line in self:
-            # Show column for all products if any product has buy_make option
-            line.show_buy_make_column = any(
-                l.product_id.manufacture_purchase in ['buy', 'buy_make']
-                for l in line.bom_id.bom_line_ids
-            )
 
     def _find_actual_root_bom(self, line):
         """Find root by traversing upward through parent BOMs"""
@@ -396,108 +374,6 @@ class MrpBomLine(models.Model):
         recursive_cleanup(line)
         return total_branches, total_components
 
-    def get_buy_make_change_results(self):
-        """Retrieve results from last buy/make change operation"""
-        self.ensure_one()
-        if hasattr(self, '_buy_make_change_results') and self.id in self._buy_make_change_results:
-            results = self._buy_make_change_results[self.id]
-            # Clean up after retrieval
-            del self._buy_make_change_results[self.id]
-            return results
-        return {}
-
-    def action_change_buy_make_selection(self, new_value):
-        """
-        Change buy/make selection and return operation results
-        This method is called from JavaScript and returns detailed results
-        """
-        self.ensure_one()
-
-        old_value = self.buy_make_selection
-
-        if old_value == new_value:
-            return {'success': True, 'message': 'No change needed'}
-
-        _logger.info(f"\n{'=' * 80}")
-        _logger.info(f"BUY/MAKE CHANGED for {self.product_id.display_name}")
-        _logger.info(f"Old: {old_value} -> New: {new_value}")
-        _logger.info(f"{'=' * 80}\n")
-
-        # Get root BOM from context
-        root_bom = None
-        if self.env.context.get('root_bom_id'):
-            root_bom_id = self.env.context.get('root_bom_id')
-            root_bom = self.env['mrp.bom'].browse(root_bom_id)
-            _logger.info(f"Root BOM from context: {root_bom.display_name}")
-
-        # If no context, find root BOM
-        if not root_bom or not root_bom.exists():
-            root_bom = self._find_actual_root_bom(self)
-            _logger.info(f"Found root BOM: {root_bom.display_name}")
-
-        # Initialize results
-        results = {
-            'success': False,
-            'product_name': self.product_id.display_name,
-            'old_value': old_value,
-            'new_value': new_value,
-            'mos_deleted': [],
-            'pos_deleted': [],
-            'transfers_cancelled': [],
-            'branches_deleted': 0,
-            'components_deleted': 0,
-            'mos_created': []
-        }
-
-        if root_bom and root_bom.exists():
-            _logger.info(f"Starting cleanup and reassignment for root BOM {root_bom.id}\n")
-
-            # STEP 1: Write the new value first
-            super(MrpBomLine, self).write({'buy_make_selection': new_value})
-
-            # STEP 2: Cancel related MOs
-            _logger.info("STEP 1: Cleanup MOs")
-            results['mos_deleted'] = self._cleanup_manufacturing_orders(self, root_bom)
-
-            # STEP 3: Cancel related POs
-            _logger.info("STEP 2: Cleanup POs")
-            results['pos_deleted'] = self._cleanup_purchase_orders(self, root_bom)
-
-            # # STEP 4: Cancel related transfers
-            # _logger.info("STEP 3: Cleanup Transfers")
-            # results['transfers_cancelled'] = self._cleanup_stock_pickings(self, root_bom)
-
-            # STEP 4: Cancel related transfers (now includes reversals)
-            _logger.info("STEP 3: Cleanup Transfers")
-            transfers_result = self._cleanup_stock_pickings(self, root_bom)
-            results['transfers_cancelled'] = [t for t in transfers_result if not t.get('reversed')]
-            results['transfers_reversed'] = [t for t in transfers_result if t.get('reversed')]
-
-            # STEP 5: Delete branch/component records
-            _logger.info("STEP 4: Cleanup Branch Records")
-            branches, components = self._cleanup_branch_records(self, root_bom)
-            results['branches_deleted'] = branches
-            results['components_deleted'] = components
-
-            # STEP 6: Reassign all branches
-            _logger.info("STEP 5: Reassigning branches")
-            root_bom.with_context(
-                changed_line_id=self.id,
-                new_buy_make_value=new_value
-            )._assign_branches_for_bom()
-
-            # STEP 7: Create MOs if MAKE selected
-            _logger.info("STEP 6: Creating MOs if MAKE selected")
-            if new_value == 'make':
-                _logger.info("Creating MOs for MAKE selection")
-                # Get created MOs info
-                created_mos = root_bom.action_create_child_mos_recursive()
-
-                results['mos_created'] = created_mos
-
-            results['success'] = True
-
-        return results
 
     def _cleanup_stock_pickings(self, line, root_bom):
         """Override to handle transfer reversal for MAKE to BUY"""
@@ -592,7 +468,7 @@ class MrpBomLine(models.Model):
             'picking_type_id': picking_type.id,
             'location_id': original_move.location_dest_id.id,
             'location_dest_id': original_move.location_id.id,
-            'origin': f"Reverse - {original_move.picking_id.name}",
+            'origin': "reverse transfer of evr",
             'move_ids': [(0, 0, {
                 'name': original_move.product_id.display_name,
                 'product_id': original_move.product_id.id,
@@ -783,3 +659,43 @@ class MrpBomLine(models.Model):
                     'sticky': True,
                 }
             )
+
+    def action_change_buy_make_selection(self, new_value):
+        """
+        Delegation method for backward compatibility with frontend calls to mrp.bom.line.
+        Redirects the call to the appropriate mrp.bom.line.branch record.
+        """
+        self.ensure_one()
+        _logger.info(f"Delegating BUY/MAKE change for BOM line {self.id} to branch...")
+        
+        root_bom_id = self.env.context.get('root_bom_id')
+        if not root_bom_id:
+             # Try to find root BOM if not in context
+             root_bom = self._find_actual_root_bom(self)
+             root_bom_id = root_bom.id if root_bom else False
+
+        if not root_bom_id:
+            return {'success': False, 'message': 'Root BOM not found for delegation'}
+
+        # 1. Try to find a branch record
+        branch = self.env['mrp.bom.line.branch'].search([
+            ('bom_id', '=', root_bom_id),
+            ('bom_line_id', '=', self.id)
+        ], limit=1)
+
+        if branch:
+            _logger.info(f"Redirecting call to branch {branch.id}")
+            return branch.action_change_buy_make_selection(new_value)
+
+        # 2. Try to find a component record (since BUY selections are now components)
+        component = self.env['mrp.bom.line.branch.components'].search([
+            ('root_bom_id', '=', root_bom_id),
+            ('cr_bom_line_id', '=', self.id)
+        ], limit=1)
+
+        if component:
+            _logger.info(f"Redirecting call to component {component.id}")
+            return component.action_change_buy_make_selection(new_value)
+
+        _logger.warning(f"No branch or component record found for BOM line {self.id} under root BOM {root_bom_id}")
+        return {'success': False, 'message': 'No structural record found for this line'}

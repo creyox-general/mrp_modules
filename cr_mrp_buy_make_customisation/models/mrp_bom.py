@@ -27,16 +27,74 @@ class MrpBom(models.Model):
     _inherit = 'mrp.bom'
 
 
-    def _should_treat_as_component(self, bom_line):
-        """Check if BOM line should be treated as normal component despite having child BOM"""
-        return (
-                bom_line.child_bom_id and
-                bom_line.product_id.manufacture_purchase in ('buy_make', 'buy') and
-                (
-                        bom_line.product_id.manufacture_purchase == 'buy' or
-                        bom_line.buy_make_selection == 'buy'
-                )
-        )
+    def _should_treat_as_component(self, bom_line, parent_branch_id=None, root_bom=None):
+        """
+        Smart path-aware check if BOM line should be treated as a component.
+        Considers context overrides, existing branch selections, and global defaults.
+        """
+        if not bom_line:
+            return False
+
+        # If not provided, assume self is root (for simple cases)
+        root_bom = root_bom or self
+
+        has_child = bool(bom_line.child_bom_id)
+        if not has_child:
+            # Check if other BOMs exist if this line has no child_bom_id
+            possible_bom = self._get_first_created_bom(bom_line.product_id)
+            if possible_bom:
+                has_child = True
+
+        is_buy_make = bom_line.product_id.manufacture_purchase == 'buy_make'
+        is_buy_product = bom_line.product_id.manufacture_purchase == 'buy'
+
+        # Component if: no child BOM OR type is strictly BUY
+        if not has_child or is_buy_product:
+            return True
+
+        # Non-BUY assembly: Handle BUY/MAKE logic
+        if not is_buy_make:
+            # Normal assembly (MAKE path)
+            return False
+
+        # BUY/MAKE assembly path resolution
+        is_buy = False
+        
+        # Priority 1: Context Overrides (Path-specific)
+        changed_line_id = self.env.context.get('changed_line_id')
+        changed_branch_id = self.env.context.get('changed_branch_id')
+        new_buy_make_value = self.env.context.get('new_buy_make_value')
+        target_parent_id = self.env.context.get('parent_branch_id')
+
+        matches_context_path = (changed_line_id and bom_line.id == changed_line_id and 
+                               ((target_parent_id == parent_branch_id) or (not target_parent_id and not parent_branch_id)))
+
+        if matches_context_path:
+            is_buy = (new_buy_make_value == 'buy')
+        else:
+            # Priority 2: Look for existing branch and its selection
+            Branch = self.env['mrp.bom.line.branch']
+            existing_branch = Branch.search([
+                ('bom_id', '=', root_bom.id),
+                ('bom_line_id', '=', bom_line.id),
+                ('parent_branch_id', '=', parent_branch_id)
+            ], limit=1)
+            
+            if existing_branch:
+                # If this IS the explicitly changed branch record, use the context value
+                if changed_branch_id and existing_branch.id == changed_branch_id:
+                    is_buy = (new_buy_make_value == 'buy')
+                elif existing_branch.buy_make_selection:
+                    is_buy = (existing_branch.buy_make_selection == 'buy')
+                else:
+                    # Fallback to line selection for branch with no selection
+                    is_buy = getattr(bom_line, 'buy_make_selection', False) == 'buy'
+            else:
+                # Priority 3: Global Default (Line selection)
+                is_buy = getattr(bom_line, 'buy_make_selection', False) == 'buy'
+
+        # Final decision: Component if assembly but BUY is selected
+        return is_buy
 
 
     def _get_first_created_bom(self, product):
@@ -50,410 +108,398 @@ class MrpBom(models.Model):
         ]
         return self.env['mrp.bom'].search(domain, order='create_date asc, id asc', limit=1)
 
-    def _assign_branches_for_bom(self):
-        """Assign branch codes incrementally - treat BUY-selected lines as components"""
+
+    def action_transition_bom_line(self, line_id, record_model, record_id, new_value):
+        """
+        ATOMIC TRANSITION PROXY:
+        This is the STABLE entry point for BUY/MAKE transitions.
+        """
+        self.ensure_one()
+        _logger.info(f"### ATOMIC TRANSITION START: Line {line_id} -> {new_value} ###")
+
+        # 1. IDENTIFY LINE & ROOT
+        line = self.env['mrp.bom.line'].browse(line_id)
+        if not line.exists():
+            return {'success': False, 'message': 'BOM Line not found'}
+
+        # 2. CAPTURE DATA BEFORE PURGE
+        old_value = getattr(line, 'buy_make_selection', 'buy')
+
+        # Snapshot only MOs tied to currently active branches (not orphaned historical ones)
+        active_branch_ids = self.env['mrp.bom.line.branch'].search([
+            ('bom_id', '=', self.id)
+        ]).ids
+        mos_before = {
+            mo.name: mo.product_id.display_name
+            for mo in self.env['mrp.production'].search([
+                ('root_bom_id', '=', self.id),
+                ('branch_mapping_id', 'in', active_branch_ids),
+                ('state', 'not in', ['done', 'cancel']),
+            ])
+        }
+
+        # 3. SURGICAL LEGACY CLEANUP (MOs, POs, Transfers)
+        # We do this FIRST while structural records still exist for path lookup
+        cleanup_results = self._cleanup_transition_legacy_data(line, self)
+
+        # Determine parent_branch_name for the context check
+        target_parent_name = "ROOT"
+        if record_model == 'mrp.bom.line.branch' and record_id:
+            branch_rec = self.env['mrp.bom.line.branch'].browse(record_id)
+            if branch_rec.parent_branch_id:
+                target_parent_name = branch_rec.parent_branch_id.branch_name
+        elif record_model == 'mrp.bom.line.branch.components' and record_id:
+            comp_rec = self.env['mrp.bom.line.branch.components'].browse(record_id)
+            if comp_rec.bom_line_branch_id:
+                target_parent_name = comp_rec.bom_line_branch_id.branch_name
+
+        # 4. FRESH REBUILD (Purge happens safely inside after caching)
+        _logger.info(f"  ✓ TRIGGERING FRESH REBUILD")
+        self.with_context(
+            changed_line_id=line_id,
+            new_buy_make_value=new_value,
+            parent_branch_name=target_parent_name,
+        )._assign_branches_for_bom()
+
+        # 6. POST-REBUILD MO CREATION
+        # Always run - surviving MAKE branches (A, B) also need new MOs even if C switched to BUY
+        _logger.info(f"  ✓ GENERATING NEW MOs for all remaining MAKE branches")
+        create_results = []
+        self.with_context(created_mos_list=create_results).action_create_child_mos_recursive()
+
+        # After full transition: show all MOs that existed before (all branches' old MOs)
+        all_deleted_mos = [{'name': name, 'product': product} for name, product in mos_before.items()]
+
+        _logger.info(f"### ATOMIC TRANSITION COMPLETE ###")
+        transfers_cancelled = [t for t in cleanup_results.get('transfers', []) if not t.get('reversed')]
+        transfers_reversed = [t for t in cleanup_results.get('transfers', []) if t.get('reversed')]
+
+        return {
+            'success': True,
+            'product_name': line.product_id.display_name,
+            'old_value': old_value,
+            'mos_deleted': all_deleted_mos,
+            'pos_deleted': cleanup_results.get('pos', []),
+            'transfers_cancelled': transfers_cancelled,
+            'transfers_reversed': transfers_reversed,
+            'mos_created': create_results,
+            'branches_deleted': 0, # They are always all deleted/reassigned now
+            'components_deleted': 0
+        }
+
+    def _cleanup_transition_legacy_data(self, line, root_bom):
+        """
+        Surgical cleanup of MOs, POs, and Transfers for a specific BOM line path.
+        """
+        self.ensure_one()
         Branch = self.env['mrp.bom.line.branch']
         Component = self.env['mrp.bom.line.branch.components']
+        Assignment = self.env['mrp.bom.line.branch.assignment']
+        
+        # Find the parent branch ID from existing assignments for this line
+        assign = Assignment.search([('root_bom_id', '=', root_bom.id), ('bom_line_id', '=', line.id)], limit=1)
+        # Guard against stale references to already-deleted branch records
+        parent_branch_id = assign.branch_id.id if (assign and assign.branch_id.exists()) else False
+
+        results = {'mos': [], 'pos': [], 'transfers': []}
+
+        # 1. CLEANUP AS BRANCH
+        branch_rec = Branch.search([
+            ('bom_id', '=', root_bom.id),
+            ('bom_line_id', '=', line.id),
+            ('parent_branch_id', '=', parent_branch_id)
+        ], limit=1)
+        
+        if branch_rec:
+            _logger.info(f"  ✗ Cleaning up BRANCH legacy data for line {line.id} (Branch {branch_rec.branch_name})")
+            results['mos'].extend(branch_rec._cleanup_branch_manufacturing_orders(root_bom))
+            res_pos, res_confirmed = branch_rec._cleanup_branch_purchase_orders_recursive_data(root_bom)
+            results['pos'].extend(res_pos)
+            results['transfers'].extend(branch_rec._cleanup_branch_stock_pickings(root_bom))
+
+        # 2. CLEANUP AS COMPONENT
+        comp_rec = Component.search([
+            ('root_bom_id', '=', root_bom.id),
+            ('cr_bom_line_id', '=', line.id),
+        ], limit=1)
+        
+        if comp_rec:
+            _logger.info(f"  ✗ Cleaning up COMPONENT legacy data for line {line.id}")
+            po_lines = self.env['purchase.order.line'].search([
+                ('component_branch_id', '=', comp_rec.id),
+                ('bom_id', '=', root_bom.id),
+            ])
+            for po_line in po_lines:
+                if po_line.order_id.state in ['draft', 'sent', 'to approve']:
+                    results['pos'].append({'po_name': po_line.order_id.name, 'product': po_line.product_id.display_name})
+                    po_line.unlink()
+
+            origin = f"EVR Flow - {root_bom.display_name}"
+            pickings = self.env['stock.picking'].search([
+                ('root_bom_id', '=', root_bom.id),
+                ('origin', '=', origin),
+                ('state', 'not in', ['cancel', 'done']),
+            ])
+            for picking in pickings:
+                moves = picking.move_ids.filtered(lambda m: m.mrp_bom_line_id.id == line.id)
+                if moves:
+                    results['transfers'].append({'transfer_name': picking.name, 'product': line.product_id.display_name})
+                    picking.action_cancel()
+
+            # Reverse DONE transfers for this Component when switching to MAKE
+            done_pickings = self.env['stock.picking'].search([
+                ('root_bom_id', '=', root_bom.id),
+                ('state', '=', 'done'),
+                ('origin', '=', origin),
+                ('location_dest_id', 'child_of', root_bom.cfe_project_location_id.id),
+            ])
+            for picking in done_pickings:
+                for move in picking.move_ids:
+                    if move.quantity > 0:
+                        reversed_trans = self.env['mrp.bom.line']._create_reverse_transfer_to_free(move, root_bom)
+                        if reversed_trans:
+                            _logger.info(f"  ↩ Created reverse transfer for component: {reversed_trans.name}")
+                            results['transfers'].append({'transfer_name': reversed_trans.name, 'product': line.product_id.display_name, 'reversed': True})
+                # Remove root_bom_id link as requested by user to prevent duplicate reversal
+                picking.write({'root_bom_id': False})
+
+        return results
+
+
+
+    def _assign_branches_for_bom(self):
+        """
+        Global Structural Rebuild: Reassigns all structural records for the Root BOM from scratch.
+        Caches manual selections for path consistency.
+        """
+        Branch = self.env['mrp.bom.line.branch']
+        Component = self.env['mrp.bom.line.branch.components']
+        Assignment = self.env['mrp.bom.line.branch.assignment']
         codes = _generate_branch_codes()
 
-        # Get override from context if line was just changed
+        # Get override from context
         changed_line_id = self.env.context.get('changed_line_id')
         new_buy_make_value = self.env.context.get('new_buy_make_value')
+        target_parent_name = self.env.context.get('parent_branch_name', "ROOT")
 
         for root_bom in self:
             if self.env.context.get('skip_branch_recompute'):
                 continue
+            
+            # 1. CACHE EXISTING SELECTIONS (Using stable branch names)
+            selection_cache = {}
+            for assign in Assignment.search([('root_bom_id', '=', root_bom.id)]):
+                sel = assign.own_branch_id.buy_make_selection if assign.own_branch_id else (assign.component_id.buy_make_selection if assign.component_id else False)
+                if sel:
+                    parent_name = assign.branch_id.branch_name if assign.branch_id else "ROOT"
+                    selection_cache[(parent_name, assign.bom_line_id.id)] = sel
 
-            # Root Guard: skip if root_bom is NOT itself in the set of roots
-            # (A BOM that has its own cfe_project_location_id is always its own root,
-            #  even if it is also used as a sub-BOM inside another root.)
-            helpers = self.env['cr.mrp.bom.helpers']
-            absolute_roots = helpers.get_root_boms_for_bom(root_bom)
-            absolute_root_ids = [r.id for r in absolute_roots]
-            if root_bom.id not in absolute_root_ids:
-                _logger.info("BOM %s is not an absolute root, skipping branch assignment", root_bom.display_name)
-                continue
+            # 2. PURGE STRUCTURE (After Caching)
+            _logger.info(f"Rebuilding Structure for ROOT BOM: {root_bom.display_name}")
+            Assignment.search([('root_bom_id', '=', root_bom.id)]).unlink()
+            Component.search([('root_bom_id', '=', root_bom.id)]).unlink()
+            Branch.search([('bom_id', '=', root_bom.id)]).unlink()
 
-            # Collect other roots that also contain this BOM, to cascade after own assignment
-            other_roots = [r for r in absolute_roots if r.id != root_bom.id]
-
-            # Ensure root_bom has cfe_project_location_id (for standard EVR) or sale_order_id (for SO)
-            if not root_bom.cfe_project_location_id and not (hasattr(root_bom, 'sale_order_id') and root_bom.sale_order_id):
-                continue
-
-            # Store root location ID (default to False if no project location)
+            # 3. REBUILD DFS
+            current_idx_ptr = 0
             root_location_id = root_bom.cfe_project_location_id.id if root_bom.cfe_project_location_id else False
 
-            _logger.info(f"\n{'=' * 80}")
-            _logger.info(f"Branch assignment (Incremental) for ROOT: {root_bom.display_name}")
-            if changed_line_id and new_buy_make_value:
-                _logger.info(f"Context override: Line {changed_line_id} = {new_buy_make_value}")
-            _logger.info(f"{'=' * 80}\n")
-
-            # Initialize index based on existing branches
-            existing_branches = Branch.search([('bom_id', '=', root_bom.id)])
-            existing_names = existing_branches.mapped('branch_name')
-            max_idx = -1
-            for name in existing_names:
-                try:
-                    if name in codes:
-                        max_idx = max(max_idx, codes.index(name))
-                except ValueError:
-                    continue
-            
-            current_idx_ptr = max_idx + 1
-            new_branches_to_mo = []
-
-            # Clear old root assignments for this root BOM
-            root_id_str = str(root_bom.id)
-            sub_boms = self.env['mrp.bom'].search([('used_in_root_bom_ids_str', 'ilike', root_id_str)])
-            _logger.info(f"DEBUG EVR (BUY/MAKE): Starting assignment for ROOT BOM: {root_bom.id}. Clearing old traces in {len(sub_boms)} sub-boms.")
-            for sub_bom in sub_boms:
-                if sub_bom.used_in_root_bom_ids_str:
-                    ids = [i.strip() for i in sub_bom.used_in_root_bom_ids_str.split(',') if i.strip() and i.strip() != root_id_str]
-                    sub_bom.used_in_root_bom_ids_str = ",".join(ids)
-
-            def should_treat_as_component(line):
-                """Check if line should be component (no branch creation)"""
-                has_child = bool(line.child_bom_id)
-                # Point 4: Check if other BOMs exist if this line has no child_bom_id
-                if not has_child:
-                    possible_bom = root_bom._get_first_created_bom(line.product_id)
-                    if possible_bom:
-                        has_child = True
-
-                is_buy_make = line.product_id.manufacture_purchase == 'buy_make'
-                is_buy_product = line.product_id.manufacture_purchase == 'buy'
-
-                # Use context override if this is the changed line
-                if changed_line_id and line.id == changed_line_id:
-                    is_buy = (new_buy_make_value == 'buy')
-                else:
-                    is_buy = line.buy_make_selection == 'buy'
-
-                # Component if: no child BOM OR (has child AND buy_make AND BUY selected) OR product is BUY type
-                result = not has_child or (has_child and is_buy_make and is_buy) or is_buy_product
-
-                return result
-
-            def dfs(current_bom, parent_location_id, depth=0, parent_branch_id=None, root_line_id=None):
+            def dfs(current_bom, parent_location_id, depth, parent_branch_id, current_root_line_id=None, parent_branch_name="ROOT"):
                 nonlocal current_idx_ptr
                 indent = "  " * depth
 
-                lines = current_bom.bom_line_ids.sorted(key=lambda r: (r.sequence or 0, r.id))
+                for line in current_bom.bom_line_ids:
+                    if not line.product_id: continue
 
-                for line in lines:
-                    # Context for this path
-                    current_root_line_id = root_line_id
-                    if depth == 0:
-                        current_root_line_id = line.id
+                    is_buy_prod = line.product_id.manufacture_purchase == 'buy'
+                    child_bom = line.child_bom_id or root_bom._get_first_created_bom(line.product_id)
+                    matches_context = (changed_line_id and line.id == changed_line_id and target_parent_name == parent_branch_name)
 
-                    treat_as_comp = should_treat_as_component(line)
-                    if treat_as_comp:
-                        # Create component record if missing
-                        is_direct = (current_bom.id == root_bom.id)
+                    if matches_context:
+                        current_selection = new_buy_make_value
+                    elif (parent_branch_name, line.id) in selection_cache:
+                        current_selection = selection_cache[(parent_branch_name, line.id)]
+                    else:
+                        # If line has a child BOM (can be MAKE), default to no selection
+                        # Only default to 'buy' for pure-buy products with no child BOM
+                        if child_bom and not is_buy_prod:
+                            current_selection = getattr(line, 'buy_make_selection', False)
+                        else:
+                            current_selection = getattr(line, 'buy_make_selection', 'buy')
 
-                        existing_comp = Component.search([
-                            ('root_bom_id', '=', root_bom.id),
-                            ('bom_id', '=', current_bom.id),
-                            ('cr_bom_line_id', '=', line.id),
-                            ('bom_line_branch_id', '=', parent_branch_id)
-                        ], limit=1)
+                    is_component = (current_selection == 'buy' or not child_bom or is_buy_prod)
+                    
+                    if depth == 0: current_root_line_id = line.id
 
-                        if not existing_comp:
-                            comp_vals = {
-                                'root_bom_id': root_bom.id,
-                                'bom_id': current_bom.id,
-                                'cr_bom_line_id': line.id,
-                                'is_direct_component': is_direct,
-                                'location_id': parent_location_id,
-                                'bom_line_branch_id': parent_branch_id,
-                                'root_line_id': current_root_line_id,
-                            }
-
-                            if parent_branch_id:
-                                branch_rec = self.env['mrp.bom.line.branch'].browse(parent_branch_id)
-                                if branch_rec.location_id:
-                                    comp_vals['location_id'] = branch_rec.location_id.id
-
-                            existing_comp = Component.create(comp_vals)
-
-                        # Create/Update assignment for this context
-                        Assignment = self.env['mrp.bom.line.branch.assignment']
-                        assign_vals = {
+                    if is_component:
+                        comp = Component.create({
                             'root_bom_id': root_bom.id,
                             'bom_id': current_bom.id,
-                            'bom_line_id': line.id,
-                            'branch_id': parent_branch_id,
-                            'own_branch_id': False,
-                            'component_id': existing_comp.id,
+                            'cr_bom_line_id': line.id,
+                            'bom_line_branch_id': parent_branch_id,
+                            'buy_make_selection': current_selection,
                             'root_line_id': current_root_line_id,
-                        }
-                        assignment = Assignment.search([
-                            ('root_bom_id', '=', root_bom.id),
-                            ('bom_line_id', '=', line.id),
-                            ('branch_id', '=', parent_branch_id)
-                        ], limit=1)
-                        if assignment:
-                            assignment.write(assign_vals)
-                        else:
-                            Assignment.create(assign_vals)
+                            'is_direct_component': not bool(parent_branch_id),
+                            'location_id': parent_location_id,
+                        })
 
-                        # STOP HERE - Do NOT process children for components
+                        Assignment.create({
+                            'root_bom_id': root_bom.id, 'bom_id': current_bom.id, 'bom_line_id': line.id,
+                            'branch_id': parent_branch_id, 'own_branch_id': False, 'component_id': comp.id,
+                            'root_line_id': current_root_line_id,
+                        })
                         continue
 
-                    # Has child BOM and NOT BUY - check/create branch
-                    # Point 4: Use first created BOM
-                    child_bom = line.child_bom_id or root_bom._get_first_created_bom(line.product_id)
-                    
-                    if child_bom:
-                        branch = Branch.search([
-                            ('bom_id', '=', root_bom.id),
-                            ('bom_line_id', '=', line.id),
-                            ('parent_branch_id', '=', parent_branch_id)
-                        ], limit=1)
+                    # Assembly (MAKE path)
+                    code = codes[current_idx_ptr]
+                    current_idx_ptr += 1
 
-                        if not branch:
-                            if current_idx_ptr >= len(codes):
-                                raise UserError("No more branch codes available")
+                    loc = self.env['stock.location'].create({
+                        'name': code, 'location_id': root_location_id, 'usage': 'internal',
+                    })
+                    branch_vals = {
+                        'bom_id': root_bom.id, 'bom_line_id': line.id, 'branch_name': code,
+                        'sequence': current_idx_ptr, 'path_uid': uuid.uuid4().hex, 'location_id': loc.id,
+                        'parent_branch_id': parent_branch_id, 'root_line_id': current_root_line_id,
+                    }
+                    # Only store selection if user explicitly chose MAKE (not default empty)
+                    if current_selection == 'make':
+                        branch_vals['buy_make_selection'] = 'make'
+                    branch = Branch.create(branch_vals)
 
-                            code = codes[current_idx_ptr]
-                            current_idx_ptr += 1
+                    Assignment.create({
+                        'root_bom_id': root_bom.id, 'bom_id': current_bom.id, 'bom_line_id': line.id,
+                        'branch_id': parent_branch_id, 'own_branch_id': branch.id, 'component_id': False,
+                        'root_line_id': current_root_line_id,
+                    })
 
-                            # Create location for this branch
-                            loc = self.env['stock.location'].create({
-                                'name': code,
-                                'location_id': parent_location_id,
-                                'usage': 'internal',
-                            })
+                    # Recurse
+                    dfs(child_bom, branch.location_id.id, depth + 1, branch.id, current_root_line_id, code)
 
-                            # Create branch record
-                            branch = Branch.create({
-                                'bom_id': root_bom.id,
-                                'bom_line_id': line.id,
-                                'branch_name': code,
-                                'sequence': current_idx_ptr,
-                                'path_uid': uuid.uuid4().hex,
-                                'location_id': loc.id,
-                                'parent_branch_id': parent_branch_id,
-                                'root_line_id': current_root_line_id,
-                            })
-                            new_branches_to_mo.append(line.id)
-
-                        # Track BOM usage in Root BOM (The new logic requested by user)
-                        root_id_str = str(root_bom.id)
-                        current_ids = [i.strip() for i in (child_bom.used_in_root_bom_ids_str or '').split(',') if i.strip()]
-                        
-                        _logger.info(f"DEBUG EVR (BUY/MAKE): Checking tracking for child BOM {child_bom.id} (under root {root_id_str}). Current strings: {current_ids}")
-                        if root_id_str not in current_ids:
-                            current_ids.append(root_id_str)
-                            new_str = ",".join(current_ids)
-                            child_bom.write({'used_in_root_bom_ids_str': new_str})
-                            _logger.info(f"DEBUG EVR (BUY/MAKE): WROTE new string '{new_str}' to child BOM {child_bom.id} ({child_bom.display_name})")
-                        else:
-                            _logger.info(f"DEBUG EVR (BUY/MAKE): Root {root_id_str} is ALREADY tracked in child BOM {child_bom.id}")
-
-                        # Create/Update assignment for this context
-                        Assignment = self.env['mrp.bom.line.branch.assignment']
-                        assign_vals = {
-                            'root_bom_id': root_bom.id,
-                            'bom_id': current_bom.id,
-                            'bom_line_id': line.id,
-                            'branch_id': parent_branch_id,
-                            'own_branch_id': branch.id,
-                            'component_id': False,
-                            'root_line_id': current_root_line_id,
-                        }
-                        assignment = Assignment.search([
-                            ('root_bom_id', '=', root_bom.id),
-                            ('bom_line_id', '=', line.id),
-                            ('branch_id', '=', parent_branch_id)
-                        ], limit=1)
-                        if assignment:
-                            assignment.write(assign_vals)
-                        else:
-                            Assignment.create(assign_vals)
-
-                        # Recurse into child BOM
-                        dfs(child_bom, parent_location_id, depth + 1, branch.id, current_root_line_id)
-
-            # Start DFS from root
             dfs(root_bom, root_location_id, 0, None)
-
-            # Point 5: Auto-create MOs for newly added branches
-            if new_branches_to_mo:
-                root_bom.action_create_child_mos_recursive()
-
         return True
-
 
     def action_create_child_mos_recursive(self, root_bom=None, parent_mo=None, index="0", level=0, parent_qty=1.0,
                                           parent_branch_location=None, parent_branch_id=None):
         """
-        Create MOs ONLY for BOM lines that have a child BOM.
-        Each MO will have:
-        1. Components: WH/Stock → Virtual/Production
-        2. Finished Product: Virtual/Production → Own Branch Location → Parent Branch Location
+        Create MOs ONLY for BOM lines that have a child BOM and are NOT set to BUY.
+        Modified to correctly handle branch path contexts including parent_branch_id.
         """
         Branch = self.env['mrp.bom.line.branch']
 
-        # Get created MOs list from context - IMPORTANT: get mutable reference
+        # Get specific branch to start from (if called recursively from a branch change)
+        start_from_branch = self.env.context.get('changed_branch_id')
+
+        # Get created MOs list from context
         created_mos_list = self.env.context.get('created_mos_list')
         if created_mos_list is None:
             created_mos_list = []
 
         if root_bom is None:
             root_bom = self
-            if not hasattr(self.__class__, '_branch_assignment_cache'):
-                self.__class__._branch_assignment_cache = {}
 
-            cache_key = f"bom_{root_bom.id}"
-            self.__class__._branch_assignment_cache[cache_key] = {
-                'assignments': {},
-                'seen_paths': []
-            }
+        _logger.info(f"{index}  >>> action_create_child_mos_recursive START: parent_branch={parent_branch_id}, root_bom={root_bom.id}")
 
-        created_mo = None
         warehouse = self.env['stock.warehouse'].search([('company_id', '=', self.env.company.id)], limit=1)
         stock_location = warehouse.lot_stock_id if warehouse else False
 
+        mo = False
         for line_idx, line in enumerate(self.bom_line_ids):
-
-            if self._should_treat_as_component(line):
+            # Check if this line is a component in the context of the current parent branch
+            is_comp = self._should_treat_as_component(line, parent_branch_id=parent_branch_id, root_bom=root_bom)
+            _logger.info(f"{index}      Line Check: {line.id} | is_component={is_comp}")
+            if is_comp:
                 continue
 
             if not line.child_bom_id:
-                continue
+                # Still check if it has a first created BOM as fallback
+                possible_bom = root_bom._get_first_created_bom(line.product_id)
+                if not possible_bom:
+                     continue
+                child_bom = possible_bom
+            else:
+                child_bom = line.child_bom_id
 
-            child_bom = line.child_bom_id
             child_qty = float(line.product_qty or 1.0) * parent_qty
             line_index = f"{index}{line_idx}"
 
-            # Find assignment for this context (Root + Parent Branch)
-            assignment = line.get_assignment(root_bom, parent_branch_id)
-            branch_rec = assignment.own_branch_id if assignment else False
+            # Find the branch record for this specific path
+            branch_rec = Branch.search([
+                ('bom_id', '=', root_bom.id),
+                ('bom_line_id', '=', line.id),
+                ('parent_branch_id', '=', parent_branch_id)
+            ], limit=1)
 
-            current_branch_location = False
-            branch_name = ""
+            _logger.info(f"{index}      Branch Lookup: line={line.id}, parent={parent_branch_id} => Found={bool(branch_rec)}")
 
-            if branch_rec and branch_rec.location_id:
-                current_branch_location = branch_rec.location_id.id
-                branch_name = branch_rec.branch_name
+            if not branch_rec:
+                continue
+
+            current_branch_location = branch_rec.location_id.id if branch_rec.location_id else False
+            branch_name = branch_rec.branch_name
 
             # Determine final destination (parent's branch location or project location)
             final_dest_location = parent_branch_location if parent_branch_location else root_bom.cfe_project_location_id.id
 
-            # CHECK: Does MO already exist for this line in this specific branch context?
+            # CHECK: Does MO already exist for this branch-line?
             existing_mo = self.env['mrp.production'].search([
                 ('root_bom_id', '=', root_bom.id),
                 ('line', '=', str(line.id)),
-                ('bom_id', '=', child_bom.id),
-                ('branch_mapping_id', '=', branch_rec.id if branch_rec else False),
+                ('branch_mapping_id', '=', branch_rec.id),
                 ('state', '=', 'draft')
             ], limit=1)
 
             if existing_mo:
-                x = existing_mo.write({
-                    'product_id': child_bom.product_tmpl_id.product_variant_id.id,
-                    'product_uom_id': child_bom.product_uom_id.id,
+                _logger.info(f"{index}      Updating EXISTING MO: {existing_mo.name} (ID: {existing_mo.id})")
+                existing_mo.write({
                     'product_qty': child_qty,
-                    'bom_id': child_bom.id,
-                    'root_bom_id': root_bom.id,
                     'parent_mo_id': parent_mo.id if parent_mo else False,
-                    'project_id': root_bom.project_id.id,
-                    'line': line.id,
-                    'cr_final_location_id':final_dest_location if final_dest_location else False,
-                    'state': 'draft',
-                    'branch_mapping_id': branch_rec.id if branch_rec else False,
+                    'cr_final_location_id': final_dest_location if final_dest_location else False,
                     'branch_intermediate_location_id': current_branch_location
                 })
-
-
-            if not existing_mo:
+                mo = existing_mo
+                if created_mos_list is not None:
+                    created_mos_list.append({
+                        'name': mo.display_name,
+                        'product': mo.product_id.display_name,
+                        'qty': mo.product_qty
+                    })
+            else:
                 mo_vals = {
-                    'product_id': child_bom.product_tmpl_id.product_variant_id.id,
+                    'product_id': child_bom.product_id.id or child_bom.product_tmpl_id.product_variant_id.id,
                     'product_uom_id': child_bom.product_uom_id.id,
                     'product_qty': child_qty,
                     'bom_id': child_bom.id,
                     'root_bom_id': root_bom.id,
                     'parent_mo_id': parent_mo.id if parent_mo else False,
                     'project_id': root_bom.project_id.id,
-                    'line': line.id,
-                    'cr_final_location_id':final_dest_location if final_dest_location else False,
+                    'line': str(line.id),
+                    'cr_final_location_id': final_dest_location if final_dest_location else False,
                     'state': 'draft',
-                    'branch_mapping_id': branch_rec.id if branch_rec else False,
+                    'branch_mapping_id': branch_rec.id,
                     'branch_intermediate_location_id': current_branch_location
                 }
 
+                _logger.info(f"{index}      Creating NEW MO for branch {branch_rec.id} (BOM: {child_bom.id}) | Qty: {child_qty}")
                 mo = self.env['mrp.production'].with_context(
                     branch_intermediate_location=current_branch_location,
                     branch_final_location=final_dest_location,
                     skip_component_moves=True,
                     force_skip_component_moves=True,
-                    created_mos_list=created_mos_list  # Pass the same list reference
+                    created_mos_list=created_mos_list
                 ).create(mo_vals)
 
-                created_mo = mo
+            # RECURSE: Create MOs for this child's sub-BOMs
+            child_bom.action_create_child_mos_recursive(
+                parent_mo=mo,
+                parent_branch_id=branch_rec.id,
+                level=level + 1,
+                index=f"{line_index}.",
+                parent_qty=child_qty,
+                parent_branch_location=current_branch_location,
+                root_bom=root_bom
+            )
 
-                if created_mo.root_bom_id.id != root_bom.id:
-                    created_mo.root_bom_id = root_bom.id
-
-                # Add created MO to list
-                created_mos_list.append({
-                    'name': mo.name,
-                    'product': mo.product_id.display_name,
-                    'qty': mo.product_qty
-                })
-
-                src_name = stock_location.display_name if stock_location else "WH/Stock"
-                intermediate_name = self.env['stock.location'].browse(
-                    current_branch_location).display_name if current_branch_location else "N/A"
-                final_name = self.env['stock.location'].browse(
-                    final_dest_location).display_name if final_dest_location else "N/A"
-
-
-                self.env['bus.bus']._sendone(
-                    self.env.user.partner_id,
-                    "simple_notification",
-                    {
-                        "title": "Manufacturing Order Created",
-                        "message": (
-                            f"MO {mo.name} created for {child_bom.display_name}\n"
-                            f"Branch: {branch_name}\n"
-                            f"Quantity: {child_qty}\n"
-                            f"Flow: {src_name} → {intermediate_name} → {final_name}"
-                        ),
-                        "sticky": False,
-                        "type": "info",
-                    }
-                )
-
-                # Pass the SAME list reference through context
-                child_bom.with_context(created_mos_list=created_mos_list).action_create_child_mos_recursive(
-                    root_bom=root_bom,
-                    parent_mo=mo,
-                    index=line_index,
-                    level=level + 1,
-                    parent_qty=child_qty,
-                    parent_branch_location=current_branch_location,
-                    parent_branch_id=branch_rec.id if branch_rec else False
-                )
-
-            else:
-
-                # Pass the SAME list reference through context
-                child_bom.with_context(created_mos_list=created_mos_list).action_create_child_mos_recursive(
-                    root_bom=root_bom,
-                    parent_mo=existing_mo,
-                    index=line_index,
-                    level=level + 1,
-                    parent_qty=child_qty,
-                    parent_branch_location=current_branch_location,
-                    parent_branch_id=branch_rec.id if branch_rec else False
-                )
-
-        if level == 0 and root_bom == self:
-            cache_key = f"bom_{root_bom.id}"
             if hasattr(self.__class__, '_branch_assignment_cache'):
                 if cache_key in self.__class__._branch_assignment_cache:
                     del self.__class__._branch_assignment_cache[cache_key]
@@ -464,8 +510,8 @@ class MrpBom(models.Model):
             # Always return as list format
             return created_mos_list
 
-        # For recursive calls, return the single MO object
-        return created_mo
+        # For recursive calls, return the single MO object (last one created in this level)
+        return mo
 
 
 
@@ -508,7 +554,7 @@ class MrpBom(models.Model):
         """
         # If BUY selected, treat as component (always approved)
         if (line.product_id.manufacture_purchase == 'buy_make' and
-                line.buy_make_selection == 'buy'):
+                getattr(line, 'buy_make_selection', None) == 'buy'):
             _logger.info(
                 "BOM line %s has BUY selected, treating as approved component",
                 line.id

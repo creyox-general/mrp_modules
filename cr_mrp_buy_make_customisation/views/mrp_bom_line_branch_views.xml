@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_mrp_bom_line_branch_form_inherit_buy_make" model="ir.ui.view">
+        <field name="name">mrp.bom.line.branch.form.inherit.buy.make</field>
+        <field name="model">mrp.bom.line.branch</field>
+        <field name="inherit_id" ref="cr_mrp_bom_evr_customisation.view_mrp_bom_line_branch_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='approve_to_manufacture']" position="before">
+                <field name="is_buy_make_product" invisible="1"/>
+                <field name="buy_make_selection" 
+                       readonly="not is_buy_make_product"
+                       required="is_buy_make_product"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

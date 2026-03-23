@@ -61,6 +61,39 @@ class PurchaseOrderLine(models.Model):
     categ_id = fields.Many2one('product.category', related='product_id.categ_id', store=True, string='Product Category')
     product_document_count = fields.Integer(compute='_compute_product_document_count', string='Document Count')
     
+    product_description_variant = fields.Char(
+        string='Description(product name)',
+        compute='_compute_product_description_variant',
+        store=True
+    )
+
+    @api.depends('product_id.default_code', 'product_id.name')
+    def _compute_product_description_variant(self):
+        """
+        Compute formatted description: '[default_code] product_name'
+        """
+        for line in self:
+            product = line.product_id
+            code = product.default_code
+            name = product.name or ''
+            if code:
+                line.product_description_variant = '%s [%s]' % (code, name)
+            else:
+                line.product_description_variant = name
+
+    def action_open_product(self):
+        """
+        Action to open the product form view.
+        """
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'product.product',
+            'res_id': self.product_id.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
+
     def _compute_product_document_count(self):
         for line in self:
             line.product_document_count = len(line.product_id.product_document_ids) if line.product_id else 0

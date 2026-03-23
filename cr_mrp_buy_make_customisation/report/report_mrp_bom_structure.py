@@ -7,6 +7,52 @@ class ReportBomStructureBranch(models.AbstractModel):
     _inherit = 'report.mrp.report_bom_structure'
 
 
+    def _find_branch_for_line_path(self, root_bom_id, bom_line, index):
+        """Helper to find the correct branch for a specific line and path index"""
+        Branch = self.env["mrp.bom.line.branch"]
+        branches = Branch.search([
+            ("bom_id", "=", root_bom_id),
+            ("bom_line_id", "=", bom_line.id),
+        ], order='sequence')
+
+        if not branches:
+            return False
+            
+        if len(branches) == 1:
+            return branches[0]
+
+        index_str = str(index)
+        path_key = f"{root_bom_id}_{bom_line.id}_{index_str}"
+
+        if not hasattr(self.__class__, '_branch_assignment_cache'):
+            self.__class__._branch_assignment_cache = {}
+
+        cache = self.__class__._branch_assignment_cache
+        cache_key = f"bom_{root_bom_id}"
+        if cache_key not in cache:
+            cache[cache_key] = {
+                'assignments': {},
+                'seen_paths': []
+            }
+
+        bom_cache = cache[cache_key]
+
+        if path_key not in bom_cache['seen_paths']:
+            existing_count = len([p for p in bom_cache['seen_paths']
+                                  if p.startswith(f"{root_bom_id}_{bom_line.id}_")])
+
+            if existing_count < len(branches):
+                branch = branches[existing_count]
+            else:
+                branch = branches[-1]
+
+            bom_cache['assignments'][path_key] = branch.id
+            bom_cache['seen_paths'].append(path_key)
+            return branch
+        else:
+            branch_id = bom_cache['assignments'].get(path_key)
+            return Branch.browse(branch_id) if branch_id else False
+
     def _get_bom_data(self, bom, warehouse, product=False, line_qty=False, bom_line=False, level=0, parent_bom=False,
                       parent_product=False, index=0, product_info=False, ignore_stock=False,
                       simulated_leaves_per_workcenter=False):
@@ -15,27 +61,32 @@ class ReportBomStructureBranch(models.AbstractModel):
             parent_bom, parent_product, index, product_info, ignore_stock, simulated_leaves_per_workcenter
         )
 
-        # Get root BOM from context or current BOM
+
         root_bom_id = self.env.context.get("root_bom_id")
         if not root_bom_id:
             root_bom_id = bom.id if bom else (parent_bom.id if parent_bom else False)
         root_bom = self.env['mrp.bom'].browse(root_bom_id) if root_bom_id else False
 
         if root_bom_id and bom_line:
+            # Find the correct branch for this line path
+            branch = self._find_branch_for_line_path(root_bom_id, bom_line, index)
 
-            # Check if this should be treated as component
-            treat_as_component = (
-                    (bom_line.child_bom_id and
-                     bom_line.product_id.manufacture_purchase == 'buy_make' and
-                     bom_line.buy_make_selection == 'buy') or
-                    bom_line.product_id.manufacture_purchase == 'buy'
-            )
+            # Check if this should be treated as component by querying the Component table
+            component_rec = self._get_component_for_line(root_bom_id, bom_line, parent_bom, index)
+            
+            has_child_bom = bool(bom_line.child_bom_id or self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal'))
+            
+            treat_as_component = False
+            if component_rec:
+                treat_as_component = True
+            elif bom_line.product_id.manufacture_purchase == 'buy':
+                treat_as_component = True
+            elif not has_child_bom:
+                treat_as_component = True
 
             if treat_as_component:
                 # Treat as component - show component fields instead of branch
                 Component = self.env["mrp.bom.line.branch.components"]
-
-                component_rec = self._get_component_for_line(root_bom_id, bom_line, parent_bom, index)
 
                 data['type'] = 'component'
                 data['components'] = []
@@ -46,6 +97,7 @@ class ReportBomStructureBranch(models.AbstractModel):
                 if component_rec:
                     component_rec.quantity = data['quantity']
                     data['branch'] = component_rec.bom_line_branch_id.branch_name
+                    data['branch_id'] = component_rec.bom_line_branch_id.id
                     data['componentId'] = component_rec.id
                     data['free_to_use'] = component_rec.free_to_use
                     data['display_free_to_use'] = True
@@ -64,6 +116,7 @@ class ReportBomStructureBranch(models.AbstractModel):
                     data['approval_1'] = component_rec.approval_1
                     data['approval_2'] = component_rec.approval_2
                     data['approve_to_manufacture'] = component_rec.bom_line_branch_id.approve_to_manufacture
+                    data['buy_make_selection'] = component_rec.buy_make_selection or False
                     data['bom_line_id'] = bom_line.id
                     data['display_name'] = bom_line.product_id.display_name
 
@@ -176,56 +229,11 @@ class ReportBomStructureBranch(models.AbstractModel):
 
             else:
                 # Normal BOM line - show branch
-                Branch = self.env["mrp.bom.line.branch"]
-
-                branches = Branch.search([
-                    ("bom_id", "=", root_bom_id),
-                    ("bom_line_id", "=", bom_line.id),
-                ], order='sequence')
-
-                branch = False
-                if branches:
-                    if len(branches) == 1:
-                        branch = branches[0]
-                    else:
-                        index_str = str(index)
-                        path_key = f"{root_bom_id}_{bom_line.id}_{index_str}"
-
-                        if not hasattr(self.__class__, '_branch_assignment_cache'):
-                            self.__class__._branch_assignment_cache = {}
-
-                        cache = self.__class__._branch_assignment_cache
-                        cache_key = f"bom_{root_bom_id}"
-                        if cache_key not in cache:
-                            cache[cache_key] = {
-                                'assignments': {},
-                                'seen_paths': []
-                            }
-
-                        bom_cache = cache[cache_key]
-
-                        if path_key not in bom_cache['seen_paths']:
-                            existing_count = len([p for p in bom_cache['seen_paths']
-                                                  if p.startswith(f"{root_bom_id}_{bom_line.id}_")])
-
-                            if existing_count < len(branches):
-                                branch = branches[existing_count]
-                            else:
-                                branch = branches[-1]
-
-                            bom_cache['assignments'][path_key] = branch.id
-                            bom_cache['seen_paths'].append(path_key)
-                        else:
-                            branch_id = bom_cache['assignments'].get(path_key)
-                            branch = Branch.browse(branch_id) if branch_id else False
-
-                        if level == 0 and not bom_line:
-                            if cache_key in cache:
-                                del cache[cache_key]
-
                 data["branch"] = branch.branch_name if branch else ""
 
                 if branch and branch.branch_name:
+                    data['is_branch'] = True
+                    data['branch_id'] = branch.id
                     data['approve_to_manufacture_editable'] = True
                     data['approve_to_manufacture'] = branch.approve_to_manufacture
                     data['display_free_to_use'] = True
@@ -236,29 +244,37 @@ class ReportBomStructureBranch(models.AbstractModel):
                     data['transferred'] = branch.transferred
                     data['used_editable'] = True
                     data['transferred_editable'] = True
+
+                    # Pull buy_make from branch
+                    data['buy_make_selection'] = branch.buy_make_selection or False
+                    # Critical lives on the branch record for branch rows
+                    data['critical'] = branch.critical
                 else:
                     data['approve_to_manufacture_editable'] = False
+                    data['critical'] = False
 
                 data['bom_line_id'] = bom_line.id if bom_line else False
 
             # Add buy_make selection data for all cases
-            data['buy_make_selection'] = bom_line.buy_make_selection or False
+            if not data.get('buy_make_selection'):
+                data['buy_make_selection'] = getattr(bom_line, 'buy_make_selection', False) or False
             data['is_buy_make_product'] = bom_line.product_id.manufacture_purchase == 'buy_make'
             data['manufacture_purchase'] = bom_line.product_id.manufacture_purchase or False
+            # Check if product has a BOM (for showing the dropdown on components)
+            data['has_bom'] = bool(self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal'))
 
         else:
             data["branch"] = ""
             data['bom_line_id'] = bom_line.id if bom_line else False
             data['has_main_vendor'] = True
 
-
-        if bom_line:
-            data['critical'] = bom_line.critical or False
-
-        else:
+        # Critical is now fully set above per branch/component path.
+        # Only set default here if still unset (e.g. no root_bom_id context)
+        if 'critical' not in data:
             data['critical'] = False
 
         return data
+
 
     def _get_component_data(self, parent_bom, parent_product, warehouse, bom_line,
                             line_quantity, level, index, product_info, ignore_stock=False):
@@ -296,6 +312,7 @@ class ReportBomStructureBranch(models.AbstractModel):
         if component_rec:
             component_rec.quantity = data['quantity']
             data['branch'] = component_rec.bom_line_branch_id.branch_name
+            data['branch_id'] = component_rec.bom_line_branch_id.id
             data['componentId'] = component_rec.id
             data['free_to_use'] = component_rec.free_to_use
 
@@ -340,19 +357,7 @@ class ReportBomStructureBranch(models.AbstractModel):
             main_vendor = product.seller_ids.filtered(lambda s: s.main_vendor) if product else False
             data['has_main_vendor'] = bool(main_vendor)
 
-            # ============= BUY/MAKE FUNCTIONALITY =============
-            # Add buy_make selection data
-            data['buy_make_selection'] = bom_line.buy_make_selection or False
-            data['is_buy_make_product'] = bom_line.product_id.manufacture_purchase == 'buy_make'
-            data['manufacture_purchase'] = bom_line.product_id.manufacture_purchase or False
-            data['show_buy_make_column'] = True  # Show column in overview
-
-            # If BUY is selected, treat as regular component
-            if bom_line.buy_make_selection == 'buy':
-                data['type'] = 'component'
-            # ============= END BUY/MAKE FUNCTIONALITY =============
-
-            data['critical'] = bom_line.critical or False
+            data['critical'] = component_rec.critical if component_rec else False
 
             if component_rec:
                 data['lost'] = component_rec.lost
@@ -383,6 +388,8 @@ class ReportBomStructureBranch(models.AbstractModel):
                 data['transferred'] = None
                 data['transferred_cfe'] = None
                 data['used'] = None
+
+            data['is_branch'] = False
         return data
 
     # def _get_component_for_line(self, root_bom_id, bom_line, parent_bom, index):
@@ -426,23 +433,6 @@ class ReportBomStructureBranch(models.AbstractModel):
 
     def _get_component_for_line(self, root_bom_id, bom_line, parent_bom, index):
         Component = self.env["mrp.bom.line.branch.components"]
-
-        # Check if line has child BOM but BUY selected (treat as component)
-        has_child_bom = bool(self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal'))
-        is_buy_make = bom_line.product_id.manufacture_purchase == 'buy_make'
-        is_buy_selected = bom_line.buy_make_selection == 'buy'
-        is_buy = bom_line.product_id.manufacture_purchase == 'buy'
-
-        treat_as_component = not has_child_bom or (has_child_bom and is_buy_make and is_buy_selected) or is_buy
-
-        if not treat_as_component:
-            return False
-
-        # # Check for child BOM
-        # child_bom = self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal')
-        #
-        # if child_bom:
-        #     return False
 
         # ROOT LEVEL COMPONENT
         if not parent_bom or parent_bom.id == root_bom_id:

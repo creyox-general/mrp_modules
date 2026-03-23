@@ -211,10 +211,17 @@ class ReportBomStructureBranch(models.AbstractModel):
 
 
     def _get_report_data(self, bom_id, searchQty=0, searchVariant=False):
+        # Clear the per-BOM branch assignment cache before every render.
+        # This prevents stale component IDs (deleted during buy/make transitions)
+        # from surviving in-process and causing "Record does not exist" errors.
+        if hasattr(self.__class__, '_branch_assignment_cache'):
+            self.__class__._branch_assignment_cache.pop(f"bom_{bom_id}", None)
+
         # Set root BOM and initial parent branch context for the entire report
         self = self.with_context(root_bom_id=bom_id, parent_branch_id=False)
         result = super()._get_report_data(bom_id, searchQty, searchVariant)
         bom = self.env['mrp.bom'].browse(bom_id)
         result['is_evr'] = bom.is_evr
         return result
+
 

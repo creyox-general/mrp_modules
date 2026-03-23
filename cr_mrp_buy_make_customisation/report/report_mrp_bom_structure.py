@@ -68,16 +68,29 @@ class ReportBomStructureBranch(models.AbstractModel):
         root_bom = self.env['mrp.bom'].browse(root_bom_id) if root_bom_id else False
 
         if root_bom_id and bom_line:
+            # Guard: on SH (multi-worker), a bom_line can be deleted by another worker
+            # between the time the view starts rendering and when we access its fields.
+            # exists() re-validates the record against the DB and skips stale refs gracefully.
+            if not bom_line.exists():
+                return data
+
             # Find the correct branch for this line path
             branch = self._find_branch_for_line_path(root_bom_id, bom_line, index)
+            # Guard: branch record may have been deleted by another worker on SH
+            if branch and not branch.exists():
+                branch = self.env['mrp.bom.line.branch']
 
             # Check if this should be treated as component by querying the Component table
             component_rec = self._get_component_for_line(root_bom_id, bom_line, parent_bom, index)
-            
+            # Guard: component record may have been deleted by another worker on SH
+            if component_rec and not component_rec.exists():
+                component_rec = self.env['mrp.bom.line.branch.components']
+
             has_child_bom = bool(bom_line.child_bom_id or self.env['mrp.bom']._bom_find(bom_line.product_id, bom_type='normal'))
-            
+
             treat_as_component = False
             if component_rec:
+
                 treat_as_component = True
             elif bom_line.product_id.manufacture_purchase == 'buy':
                 treat_as_component = True
@@ -504,6 +517,10 @@ class ReportBomStructureBranch(models.AbstractModel):
         else:
             # Path already seen, reuse assignment
             component_id = bom_cache['assignments'].get(path_key)
-            return Component.browse(component_id) if component_id else components[0]
+            if component_id:
+                rec = Component.browse(component_id)
+                # Guard: stale cache — record may have been deleted by a buy/make transition
+                return rec if rec.exists() else False
+            return components[0] if components.exists() else False
 
 

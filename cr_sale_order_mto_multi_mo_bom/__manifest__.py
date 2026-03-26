@@ -2,7 +2,7 @@
 # Part of Creyox Technologies
 {
     'name': 'Sale Order MTO Multi MO BOM',
-    'version': '18.0.0.13',
+    'version': '18.0.0.14',
     'category': 'Sales',
     'summary': 'Create hierarchical BOMs on SO confirmation for RE orders',
     "author": "Creyox Technologies",
@@ -19,7 +19,14 @@
         'views/mrp_bom.xml',
         'views/sale_order.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'cr_sale_order_mto_multi_mo_bom/static/src/components/bom_overview_table/mrp_bom_overview_table.js',
+            'cr_sale_order_mto_multi_mo_bom/static/src/components/bom_overview_table/mrp_bom_overview_table.xml',
+        ],
+    },
     'installable': True,
+
     'application': False,
     'auto_install': False,
     'license': 'LGPL-3',

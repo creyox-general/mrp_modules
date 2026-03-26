@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 # Part of Creyox Technologies.
+import logging
 from odoo import models, api
 import base64
+
+_logger = logging.getLogger(__name__)
 
 class ReportBomStructureBranch(models.AbstractModel):
     _inherit = 'report.mrp.report_bom_structure'
@@ -125,18 +128,37 @@ class ReportBomStructureBranch(models.AbstractModel):
                 })
                 
                 # Manufacturer handling
+                available_manufacturers_recs = comp._get_available_manufacturers()
                 available_manufacturers = []
-                main_vendor_lines = bom_line.product_id.product_tmpl_id.seller_ids.filtered(lambda s: s.main_vendor)
-                for vendor in main_vendor_lines:
-                    for manufacturer in vendor.manufacturer_ids:
-                        available_manufacturers.append({
-                            'id': manufacturer.id,
-                            'ref': manufacturer.manufacture_internal_ref,
-                            'name': manufacturer.manufacture_internal_ref,
-                        })
+                for manufacturer in available_manufacturers_recs:
+                    available_manufacturers.append({
+                        'id': manufacturer.id,
+                        'ref': manufacturer.manufacture_internal_ref,
+                        'name': manufacturer.manufacture_internal_ref,
+                    })
                 data['available_manufacturers'] = available_manufacturers
                 data['product_manufacturer_id'] = comp.product_manufacturer_id.id if comp.product_manufacturer_id else False
-                data['product_manufacturer_editable'] = not bool(bom_line.child_bom_id)
+                data['product_manufacturer_ref'] = comp.product_manufacturer_id.manufacture_internal_ref if comp.product_manufacturer_id else ""
+                
+                # Check for "no data available" case
+                if not available_manufacturers:
+                    data['product_manufacturer_ref'] = "No data available for manufacturer"
+
+                # Update: only editable if more than 1 option exists
+                data['product_manufacturer_editable'] = not bool(bom_line.child_bom_id) and len(available_manufacturers) > 1
+
+                # Fallback: if not set but only 1 option available, auto-assign for the report display
+                if not data['product_manufacturer_id'] and len(available_manufacturers) == 1:
+                    mfr_data = available_manufacturers[0]
+                    data['product_manufacturer_id'] = mfr_data['id']
+                    data['product_manufacturer_ref'] = mfr_data['ref']
+                    # Persist it to the record
+                    comp.write({'product_manufacturer_id': mfr_data['id']})
+
+                _logger.info("BOM STRUCTURE DEBUG (Base): Line %s, Product %s, Mfr ID: %s, Mfr Ref: %s, Editable: %s", 
+                             bom_line.id, bom_line.product_id.display_name, data['product_manufacturer_id'], 
+                             data['product_manufacturer_ref'], data['product_manufacturer_editable'])
+
 
                 # PO handling (merged logic)
                 po_data = []

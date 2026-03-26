@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'MRP Buy/Make Customisation',
-    'version': '18.0.0.16',
+    'version': '18.0.0.17',
     'category': 'Manufacturing',
     'summary': 'Add Buy/Make selection in BOM overview for products',
     'description': """
@@ -16,6 +16,7 @@
     'depends': ['mrp', 'purchase', 'stock', "cr_mrp_bom_customisation",
         "cr_mrp_bom_evr_customisation","cr_mrp_bom_evr_automation",'bus','cr_custom_internal_transfer'],
     'data': [
+        'security/ir.model.access.csv',
         'views/stock_picking.xml',
         'views/product_category_views.xml',
         'views/product_template_views.xml',
@@ -23,6 +24,7 @@
         'views/mrp_production_views.xml',
         'views/mrp_bom_line_branch_views.xml',
         'views/mrp_bom_line_branch_components_views.xml',
+        'views/mechanical_parts_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

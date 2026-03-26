@@ -2,6 +2,7 @@
 # Part of Creyox Technologies.
 from odoo import models, fields, api
 import logging
+from markupsafe import Markup
 
 from odoo.exceptions import UserError
 
@@ -29,8 +30,17 @@ class MrpBomLineBranchComponents(models.Model):
             existing_line.order_id.po_type = 'mrp'
 
             if existing_line.product_qty != quantity:
+                old_qty = existing_line.product_qty
                 existing_line.product_qty = quantity
                 self.customer_po_ids = [(4, existing_line.id)]
+                
+                # Post chatter message to Buyer
+                buyer = existing_line.order_id.user_id
+                if buyer:
+                    mention = Markup('<a href="#" data-oe-model="res.partner" data-oe-id="%s">@%s</a>') % (buyer.partner_id.id, buyer.name)
+                    msg = Markup('%s update qty from %s to %s') % (mention, old_qty, quantity)
+                    existing_line.order_id.message_post(body=msg, partner_ids=[buyer.partner_id.id])
+
                 self._send_notification(
                     "Purchase Order Updated (CFE)",
                     f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",
@@ -145,8 +155,17 @@ class MrpBomLineBranchComponents(models.Model):
             existing_line.manufacturer_id = self.product_manufacturer_id.id
             self.vendor_po_ids = [(4, existing_line.id)]
             if existing_line.product_qty != quantity:
+                old_qty = existing_line.product_qty
                 existing_line.product_qty = quantity
                 _logger.info("Updated existing PO line qty to %s", quantity)
+
+                # Post chatter message to Buyer
+                buyer = existing_line.order_id.user_id
+                if buyer:
+                    mention = Markup('<a href="#" data-oe-model="res.partner" data-oe-id="%s">@%s</a>') % (buyer.partner_id.id, buyer.name)
+                    msg = Markup('%s update qty from %s to %s') % (mention, old_qty, quantity)
+                    existing_line.order_id.message_post(body=msg, partner_ids=[buyer.partner_id.id])
+
                 self._send_notification(
                     "Purchase Order Updated (Non - CFE)",
                     f"Updated Qty to {existing_line.product_qty} for {existing_line.order_id.name}",

@@ -42,22 +42,25 @@
             </td>
 
 
-            <td t-if="data.is_evr and props.showOptions.buyMakeSelection" class="text-center">
-                <select t-if="data.is_buy_make_product"
-                         class="form-select form-select-sm"
-                         t-att-data-bom-line-id="data.bom_line_id"
-                         t-att-data-branch-id="data.branch_id"
-                         t-att-data-component-id="data.componentId"
-                         t-model="data.buy_make_selection"
-                         t-on-change="onBuyMakeChange"
-                         style="width: 120px; margin: 0 auto;">
-                    <option value="">Select...</option>
-                    <option value="buy">BUY</option>
-                    <option value="make">MAKE</option>
-                </select>
-                <span t-elif="data.manufacture_purchase == 'buy'" class="badge bg-info">BUY ONLY</span>
-                <span t-else="" class="text-muted">-</span>
-            </td>
+
+<!--                    <td t-if="data.is_evr and props.showOptions.buyMakeSelection" class="text-center">-->
+<!--                <select t-if="data.is_buy_make_product"-->
+<!--                         class="form-select form-select-sm"-->
+<!--                         t-att-data-bom-line-id="data.bom_line_id"-->
+<!--                         t-att-data-branch-id="data.branch_id"-->
+<!--                         t-att-data-component-id="data.componentId"-->
+<!--                         t-model="data.buy_make_selection"-->
+<!--                         t-on-change="onBuyMakeChange"-->
+<!--                         style="width: 120px; margin: 0 auto;">-->
+<!--                    <option value="">Select...</option>-->
+<!--                    <option value="buy">BUY</option>-->
+<!--                    <option value="make">MAKE</option>-->
+<!--                </select>-->
+<!--                <span t-elif="data.manufacture_purchase == 'buy'" class="badge bg-info">BUY ONLY</span>-->
+<!--                <span t-else="" class="text-muted">-</span>-->
+<!--            </td>-->
+
+
         </xpath>
 
         <xpath expr="//td[@name='td_used']" position="after">

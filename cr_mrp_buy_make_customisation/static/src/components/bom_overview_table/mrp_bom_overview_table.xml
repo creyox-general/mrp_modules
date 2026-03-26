@@ -6,7 +6,7 @@
 
    <xpath expr="//th[@name='th_mrp_bom_h']" position="after">
             <th t-if="data.is_evr" class="text-center">Critical</th>
-       <th t-if="data.is_evr and  props.showOptions.buyMakeSelection" class="text-center">Buy/Make</th>
+<!--       <th t-if="data.is_evr and  props.showOptions.buyMakeSelection" class="text-center">Buy/Make</th>-->
 
    </xpath>
 

@@ -26,6 +26,35 @@ def _generate_branch_codes():
 class MrpBom(models.Model):
     _inherit = 'mrp.bom'
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        boms = super().create(vals_list)
+        if not self.env.context.get('skip_branch_recompute'):
+            for bom in boms:
+                bom._assign_branches_for_bom()
+        return boms
+
+    def write(self, vals):
+        res = super().write(vals)
+        if not self.env.context.get('skip_branch_recompute'):
+            # Only rebuild if structure-affecting fields changed
+            if any(f in vals for f in ['bom_line_ids', 'product_qty', 'product_uom_id']):
+                for bom in self:
+                    bom._assign_branches_for_bom()
+        return res
+
+    @api.model
+    def _auto_sync_mechanical_parts(self):
+        """Helper for XML function tag to sync all BoMs on upgrade. Uses UI-Only mode to avoid touching structure."""
+        boms = self.search([])
+        boms.with_context(sync_ui_only=True).action_force_rebuild_mechanical_parts()
+        return True
+
+    def action_force_rebuild_mechanical_parts(self):
+        """Force a full structural rebuild and sync for selected BoMs."""
+        for bom in self:
+            bom._assign_branches_for_bom()
+        return True
 
     def _should_treat_as_component(self, bom_line, parent_branch_id=None, root_bom=None):
         """
@@ -45,11 +74,12 @@ class MrpBom(models.Model):
             if possible_bom:
                 has_child = True
 
+        is_mech_categ = bom_line.product_id.categ_id.mech
         is_buy_make = bom_line.product_id.manufacture_purchase == 'buy_make'
         is_buy_product = bom_line.product_id.manufacture_purchase == 'buy'
 
-        # Component if: no child BOM OR type is strictly BUY
-        if not has_child or is_buy_product:
+        # Component if: (no child BOM AND not mechanical) OR type is strictly BUY
+        if not (has_child or is_mech_categ) or is_buy_product:
             return True
 
         # Non-BUY assembly: Handle BUY/MAKE logic
@@ -109,7 +139,7 @@ class MrpBom(models.Model):
         return self.env['mrp.bom'].search(domain, order='create_date asc, id asc', limit=1)
 
 
-    def action_transition_bom_line(self, line_id, record_model, record_id, new_value):
+    def action_transition_bom_line(self, line_id, record_model, record_id, new_value, parent_branch_name=None):
         """
         ATOMIC TRANSITION PROXY:
         This is the STABLE entry point for BUY/MAKE transitions.
@@ -121,6 +151,21 @@ class MrpBom(models.Model):
         line = self.env['mrp.bom.line'].browse(line_id)
         if not line.exists():
             return {'success': False, 'message': 'BOM Line not found'}
+
+        # Determine parent_branch_name for the context check
+        target_parent_name = parent_branch_name or "ROOT"
+        if record_model == 'mrp.bom.line.branch' and record_id:
+            branch_rec = self.env['mrp.bom.line.branch'].browse(record_id)
+            if branch_rec.parent_branch_id:
+                target_parent_name = branch_rec.parent_branch_id.branch_name
+        elif record_model == 'mrp.bom.line.branch.components' and record_id:
+            comp_rec = self.env['mrp.bom.line.branch.components'].browse(record_id)
+            if comp_rec.bom_line_branch_id:
+                target_parent_name = comp_rec.bom_line_branch_id.branch_name
+        elif record_model == 'mrp.mechanical.part' and record_id:
+            mech_rec = self.env['mrp.mechanical.part'].browse(record_id)
+            if mech_rec.exists():
+                target_parent_name = mech_rec.parent_branch_name
 
         # 2. CAPTURE DATA BEFORE PURGE
         old_value = getattr(line, 'buy_make_selection', 'buy')
@@ -138,20 +183,28 @@ class MrpBom(models.Model):
             ])
         }
 
-        # 3. SURGICAL LEGACY CLEANUP (MOs, POs, Transfers)
+        # 3. SURGICAL & AGGRESSIVE LEGACY CLEANUP (MOs, POs, Transfers)
         # We do this FIRST while structural records still exist for path lookup
-        cleanup_results = self._cleanup_transition_legacy_data(line, self)
+        cleanup_results = self._cleanup_transition_legacy_data(line, self, parent_branch_name=target_parent_name)
 
-        # Determine parent_branch_name for the context check
-        target_parent_name = "ROOT"
-        if record_model == 'mrp.bom.line.branch' and record_id:
-            branch_rec = self.env['mrp.bom.line.branch'].browse(record_id)
-            if branch_rec.parent_branch_id:
-                target_parent_name = branch_rec.parent_branch_id.branch_name
-        elif record_model == 'mrp.bom.line.branch.components' and record_id:
-            comp_rec = self.env['mrp.bom.line.branch.components'].browse(record_id)
-            if comp_rec.bom_line_branch_id:
-                target_parent_name = comp_rec.bom_line_branch_id.branch_name
+        # AGGRESSIVE GLOBAL MO CLEANUP: Delete ALL draft/confirmed/progress MOs for this project (ROOT BOM)
+        # USER REQUEST: Search using ONLY root_bom_id, nothing else.
+        extra_mos = self.env['mrp.production'].search([
+            ('root_bom_id', '=', self.id),
+            ('state', 'in', ['draft', 'confirmed', 'progress', 'to_close'])
+        ])
+        for xmo in extra_mos:
+            # Check if already handled in cleanup_results
+            if xmo.name not in [m.get('name') for m in cleanup_results.get('mos', [])]:
+                cleanup_results['mos'].append({
+                    'name': xmo.name, 
+                    'product': xmo.product_id.display_name,
+                    'state': xmo.state
+                })
+                _logger.info(f"  ✗ Deleting PROJECT-WIDE MO: {xmo.name} (State: {xmo.state})")
+                xmo.action_cancel()
+                xmo.unlink()
+
 
         # 4. FRESH REBUILD (Purge happens safely inside after caching)
         _logger.info(f"  ✓ TRIGGERING FRESH REBUILD")
@@ -161,14 +214,19 @@ class MrpBom(models.Model):
             parent_branch_name=target_parent_name,
         )._assign_branches_for_bom()
 
-        # 6. POST-REBUILD MO CREATION
-        # Always run - surviving MAKE branches (A, B) also need new MOs even if C switched to BUY
         _logger.info(f"  ✓ GENERATING NEW MOs for all remaining MAKE branches")
         create_results = []
         self.with_context(created_mos_list=create_results).action_create_child_mos_recursive()
+        
+        # FINAL SYNC: picking up new MOs without unlinking structure again
+        self.with_context(skip_structural_recompute=True)._assign_branches_for_bom()
 
         # After full transition: show all MOs that existed before (all branches' old MOs)
         all_deleted_mos = [{'name': name, 'product': product} for name, product in mos_before.items()]
+
+        # 7. REAL-TIME NOTIFICATIONS (WOW EFFECT)
+        _logger.info(f"  ✓ SENDING TRANSITION NOTIFICATION")
+        self._notify_transition_summary(line, old_value, new_value, cleanup_results, create_results)
 
         _logger.info(f"### ATOMIC TRANSITION COMPLETE ###")
         transfers_cancelled = [t for t in cleanup_results.get('transfers', []) if not t.get('reversed')]
@@ -187,7 +245,7 @@ class MrpBom(models.Model):
             'components_deleted': 0
         }
 
-    def _cleanup_transition_legacy_data(self, line, root_bom):
+    def _cleanup_transition_legacy_data(self, line, root_bom, parent_branch_name=None):
         """
         Surgical cleanup of MOs, POs, and Transfers for a specific BOM line path.
         """
@@ -197,18 +255,26 @@ class MrpBom(models.Model):
         Assignment = self.env['mrp.bom.line.branch.assignment']
         
         # Find the parent branch ID from existing assignments for this line
-        assign = Assignment.search([('root_bom_id', '=', root_bom.id), ('bom_line_id', '=', line.id)], limit=1)
+        assign_domain = [('root_bom_id', '=', root_bom.id), ('bom_line_id', '=', line.id)]
+        if parent_branch_name:
+            if parent_branch_name == "ROOT":
+                assign_domain.append(('branch_id', '=', False))
+            else:
+                assign_domain.append(('branch_id.branch_name', '=', parent_branch_name))
+        
+        assign = Assignment.search(assign_domain, limit=1)
         # Guard against stale references to already-deleted branch records
         parent_branch_id = assign.branch_id.id if (assign and assign.branch_id.exists()) else False
 
         results = {'mos': [], 'pos': [], 'transfers': []}
 
         # 1. CLEANUP AS BRANCH
-        branch_rec = Branch.search([
+        branch_domain = [
             ('bom_id', '=', root_bom.id),
             ('bom_line_id', '=', line.id),
             ('parent_branch_id', '=', parent_branch_id)
-        ], limit=1)
+        ]
+        branch_rec = Branch.search(branch_domain, limit=1)
         
         if branch_rec:
             _logger.info(f"  ✗ Cleaning up BRANCH legacy data for line {line.id} (Branch {branch_rec.branch_name})")
@@ -265,6 +331,65 @@ class MrpBom(models.Model):
 
         return results
 
+    def _notify_transition_summary(self, line, old_value, new_value, cleanup, created):
+        """Send detailed real-time notification about the transition summary."""
+        title = f"Transition: {old_value.upper()} → {new_value.upper()}"
+        product = line.product_id.display_name
+        
+        msg_parts = [f"Product: {product}", ""]
+        
+        mos_del = cleanup.get('mos', [])
+        if mos_del:
+            states_map = {
+                'draft': 'draft',
+                'confirmed': 'confirmed',
+                'progress': 'in-progress',
+                'to_close': 'closing'
+            }
+            summary_by_state = {}
+            for m in mos_del:
+                s = states_map.get(m.get('state'), 'other')
+                summary_by_state.setdefault(s, []).append(f"{m['name']} ({m.get('product', 'Unknown')})")
+            
+            if len(summary_by_state) == 1:
+                state_label, mo_list = list(summary_by_state.items())[0]
+                msg_parts.append(f"• Deleted {len(mos_del)} {state_label} MOs: {', '.join([m['name'] for m in mos_del])}")
+            else:
+                msg_parts.append(f"• Deleted {len(mos_del)} Project MOs:")
+                for state_label, mo_details in summary_by_state.items():
+                    msg_parts.append(f"  - {state_label.capitalize()}: {', '.join(mo_details)}")
+            
+        pos_del = cleanup.get('pos', [])
+        if pos_del:
+            msg_parts.append(f"• Cancelled {len(pos_del)} PO lines/orders.")
+            
+        trans_cancelled = [t for t in cleanup.get('transfers', []) if not t.get('reversed')]
+        if trans_cancelled:
+            msg_parts.append(f"• Cancelled {len(trans_cancelled)} pending transfers.")
+            
+        trans_reversed = [t for t in cleanup.get('transfers', []) if t.get('reversed')]
+        if trans_reversed:
+            msg_parts.append(f"• Created {len(trans_reversed)} reverse transfers to WH/Free.")
+            
+        if created:
+            msg_parts.append(f"• Created {len(created)} new Manufacturing Orders.")
+            
+        if not (mos_del or pos_del or trans_cancelled or trans_reversed or created):
+            msg_parts.append("• Structure updated (no secondary actions required).")
+            
+        message = "\n".join(msg_parts)
+        
+        self.env['bus.bus']._sendone(
+            self.env.user.partner_id,
+            "simple_notification",
+            {
+                "title": title,
+                "message": message,
+                "sticky": False,
+                "type": "success" if new_value == 'make' else "info",
+            }
+        )
+
 
 
     def _assign_branches_for_bom(self):
@@ -276,37 +401,43 @@ class MrpBom(models.Model):
         Component = self.env['mrp.bom.line.branch.components']
         Assignment = self.env['mrp.bom.line.branch.assignment']
         codes = _generate_branch_codes()
+        
+        # Check for UI-Only mode (Refresh Management UI without touching backend structure)
+        ui_only = self.env.context.get('sync_ui_only')
+        skip_structural = self.env.context.get('skip_structural_recompute') or ui_only
 
-        # Get override from context
-        changed_line_id = self.env.context.get('changed_line_id')
-        new_buy_make_value = self.env.context.get('new_buy_make_value')
-        target_parent_name = self.env.context.get('parent_branch_name', "ROOT")
-
+        PartObj = self.env['mrp.mechanical.part']
+        
         for root_bom in self:
             if self.env.context.get('skip_branch_recompute'):
                 continue
-            
-            # 1. CACHE EXISTING SELECTIONS (Using stable branch names)
+                
+            # selection_cache should pull from STABLE Management UI records
             selection_cache = {}
-            for assign in Assignment.search([('root_bom_id', '=', root_bom.id)]):
-                sel = assign.own_branch_id.buy_make_selection if assign.own_branch_id else (assign.component_id.buy_make_selection if assign.component_id else False)
-                if sel:
-                    parent_name = assign.branch_id.branch_name if assign.branch_id else "ROOT"
-                    selection_cache[(parent_name, assign.bom_line_id.id)] = sel
+            existing_parts = PartObj.search([('root_bom_id', '=', root_bom.id)])
+            for part in existing_parts:
+                if part.buy_make_selection:
+                    selection_cache[(part.parent_branch_name, part.bom_line_id.id)] = part.buy_make_selection
 
-            # 2. PURGE STRUCTURE (After Caching)
-            _logger.info(f"Rebuilding Structure for ROOT BOM: {root_bom.display_name}")
-            Assignment.search([('root_bom_id', '=', root_bom.id)]).unlink()
-            Component.search([('root_bom_id', '=', root_bom.id)]).unlink()
-            Branch.search([('bom_id', '=', root_bom.id)]).unlink()
+            if not skip_structural:
+                # PURGE STRUCTURE (Backend models only)
+                _logger.info(f"Rebuilding Structure for ROOT BOM: {root_bom.display_name}")
+                Assignment.search([('root_bom_id', '=', root_bom.id)]).unlink()
+                Component.search([('root_bom_id', '=', root_bom.id)]).unlink()
+                Branch.search([('bom_id', '=', root_bom.id)]).unlink()
 
-            # 3. REBUILD DFS
+            # 3. REBUILD DFS (with Mechanical Sync)
             current_idx_ptr = 0
             root_location_id = root_bom.cfe_project_location_id.id if root_bom.cfe_project_location_id else False
+            mechanical_sync_data = []
 
-            def dfs(current_bom, parent_location_id, depth, parent_branch_id, current_root_line_id=None, parent_branch_name="ROOT"):
+            # Extract context for targeted selection overrides
+            changed_line_id = self.env.context.get('changed_line_id')
+            new_buy_make_value = self.env.context.get('new_buy_make_value')
+            target_parent_name = self.env.context.get('parent_branch_name', "ROOT")
+
+            def dfs(current_bom, parent_branch_id, depth, current_root_line_id=None, parent_branch_name="ROOT"):
                 nonlocal current_idx_ptr
-                indent = "  " * depth
 
                 for line in current_bom.bom_line_ids:
                     if not line.product_id: continue
@@ -320,63 +451,113 @@ class MrpBom(models.Model):
                     elif (parent_branch_name, line.id) in selection_cache:
                         current_selection = selection_cache[(parent_branch_name, line.id)]
                     else:
-                        # If line has a child BOM (can be MAKE), default to no selection
-                        # Only default to 'buy' for pure-buy products with no child BOM
                         if child_bom and not is_buy_prod:
                             current_selection = getattr(line, 'buy_make_selection', False)
                         else:
                             current_selection = getattr(line, 'buy_make_selection', 'buy')
 
-                    is_component = (current_selection == 'buy' or not child_bom or is_buy_prod)
+                    is_mech_categ = line.product_id.categ_id.mech
+                    is_component = (current_selection == 'buy' or not (child_bom or is_mech_categ) or is_buy_prod)
                     
                     if depth == 0: current_root_line_id = line.id
 
-                    if is_component:
-                        comp = Component.create({
-                            'root_bom_id': root_bom.id,
-                            'bom_id': current_bom.id,
-                            'cr_bom_line_id': line.id,
-                            'bom_line_branch_id': parent_branch_id,
-                            'buy_make_selection': current_selection,
-                            'root_line_id': current_root_line_id,
-                            'is_direct_component': not bool(parent_branch_id),
-                            'location_id': parent_location_id,
-                        })
-
-                        Assignment.create({
-                            'root_bom_id': root_bom.id, 'bom_id': current_bom.id, 'bom_line_id': line.id,
-                            'branch_id': parent_branch_id, 'own_branch_id': False, 'component_id': comp.id,
-                            'root_line_id': current_root_line_id,
-                        })
-                        continue
-
-                    # Assembly (MAKE path)
-                    code = codes[current_idx_ptr]
-                    current_idx_ptr += 1
-
-                    loc = self.env['stock.location'].create({
-                        'name': code, 'location_id': root_location_id, 'usage': 'internal',
-                    })
-                    branch_vals = {
-                        'bom_id': root_bom.id, 'bom_line_id': line.id, 'branch_name': code,
-                        'sequence': current_idx_ptr, 'path_uid': uuid.uuid4().hex, 'location_id': loc.id,
-                        'parent_branch_id': parent_branch_id, 'root_line_id': current_root_line_id,
+                    path_key = f"{root_bom.id}_{line.id}_{parent_branch_name}"
+                    sync_vals = {
+                        'path_key': path_key,
+                        'bom_id': current_bom.id,
+                        'bom_line_id': line.id,
+                        'parent_branch_name': parent_branch_name,
+                        'selection': current_selection or '',
+                        'is_buy_make_product': True, # We already filtered for buy_make
                     }
-                    # Only store selection if user explicitly chose MAKE (not default empty)
-                    if current_selection == 'make':
-                        branch_vals['buy_make_selection'] = 'make'
-                    branch = Branch.create(branch_vals)
 
-                    Assignment.create({
-                        'root_bom_id': root_bom.id, 'bom_id': current_bom.id, 'bom_line_id': line.id,
-                        'branch_id': parent_branch_id, 'own_branch_id': branch.id, 'component_id': False,
-                        'root_line_id': current_root_line_id,
-                    })
+                    if is_component:
+                        # 1. LEGACY COMPONENT RECORD
+                        if not skip_structural:
+                            comp = Component.create({
+                                'root_bom_id': root_bom.id,
+                                'bom_id': current_bom.id,
+                                'cr_bom_line_id': line.id,
+                                'bom_line_branch_id': parent_branch_id,
+                                'buy_make_selection': current_selection,
+                                'root_line_id': current_root_line_id,
+                                'is_direct_component': not bool(parent_branch_id),
+                                'location_id': root_location_id, # Always use root loc
+                            })
 
-                    # Recurse
-                    dfs(child_bom, branch.location_id.id, depth + 1, branch.id, current_root_line_id, code)
+                            Assignment.create({
+                                'root_bom_id': root_bom.id, 'bom_id': current_bom.id, 'bom_line_id': line.id,
+                                'branch_id': parent_branch_id, 'own_branch_id': False, 'component_id': comp.id,
+                                'root_line_id': current_root_line_id,
+                            })
+                        
+                        sync_vals.update({
+                            'part_type': 'component',
+                            'branch_name': False,
+                        })
+                    else:
+                        # 2. LEGACY BRANCH RECORD
+                        code = codes[current_idx_ptr]
+                        current_idx_ptr += 1
 
-            dfs(root_bom, root_location_id, 0, None)
+                        if not skip_structural:
+                            loc = self.env['stock.location'].create({
+                                'name': code, 'location_id': root_location_id, 'usage': 'internal',
+                            })
+                            branch_vals = {
+                                'bom_id': root_bom.id, 'bom_line_id': line.id, 'branch_name': code,
+                                'sequence': current_idx_ptr, 'path_uid': uuid.uuid4().hex, 'location_id': loc.id,
+                                'parent_branch_id': parent_branch_id, 'root_line_id': current_root_line_id,
+                            }
+                            if current_selection == 'make':
+                                branch_vals['buy_make_selection'] = 'make'
+                            branch = Branch.create(branch_vals)
+
+                            Assignment.create({
+                                'root_bom_id': root_bom.id, 'bom_id': current_bom.id, 'bom_line_id': line.id,
+                                'branch_id': parent_branch_id, 'own_branch_id': branch.id, 'component_id': False,
+                                'root_line_id': current_root_line_id,
+                            })
+                        else:
+                            # In Read-Only / UI-Only mode, we don't create or search for branches in the backend
+                            branch = False 
+                        
+                        sync_vals.update({
+                            'part_type': 'branch',
+                            'branch_name': code,
+                        })
+
+                    # 3. MO SYNC DATA (Strict UI Filter)
+                    # USER REQUEST: ONLY sync to Management UI if is 'buy_make'
+                    if line.product_id.manufacture_purchase == 'buy_make':
+                        mos = self.env['mrp.production'].search([
+                            ('root_bom_id', '=', root_bom.id),
+                            ('line', '=', str(line.id)),
+                            ('state', '!=', 'cancel')
+                        ])
+                        # Link MOs to branch if we are in structural mode
+                        if not is_component and branch:
+                             mos.write({'branch_mapping_id': branch.id})
+                             
+                        sync_vals['mo_ids'] = mos.ids
+                        mechanical_sync_data.append(sync_vals)
+                    else:
+                        # Link MOs to branch if they happen to exist but aren't buy_make (and we have a branch)
+                        if not is_component and branch:
+                            self.env['mrp.production'].search([
+                                ('root_bom_id', '=', root_bom.id),
+                                ('line', '=', str(line.id)),
+                                ('state', '!=', 'cancel')
+                            ]).write({'branch_mapping_id': branch.id})
+
+                    # 4. RECURSION (Always recurse through sub-boms if they are set to MAKE)
+                    if not is_component and child_bom:
+                        dfs(child_bom, branch.id if branch else False, depth + 1, current_root_line_id, code)
+
+            dfs(root_bom, None, 0)
+            
+            # 4. Synchronize Mechanical Parts
+            self.env['mrp.mechanical.part'].sync_mechanical_parts(root_bom, mechanical_sync_data)
         return True
 
     def action_create_child_mos_recursive(self, root_bom=None, parent_mo=None, index="0", level=0, parent_qty=1.0,

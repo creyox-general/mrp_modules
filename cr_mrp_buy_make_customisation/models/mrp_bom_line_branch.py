@@ -145,8 +145,12 @@ class MrpBomLineBranch(models.Model):
         ])
         
         for mo in mos:
-            deleted_mos.append({'name': mo.name, 'product': mo.product_id.display_name})
-            _logger.info(f"  ✗ Deleting branch MO: {mo.name}")
+            deleted_mos.append({
+                'name': mo.name, 
+                'product': mo.product_id.display_name,
+                'state': mo.state
+            })
+            _logger.info(f"  ✗ Deleting branch MO: {mo.name} (State: {mo.state})")
             mo.action_cancel()
             mo.unlink()
 

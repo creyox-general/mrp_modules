@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, api
+from odoo import models, fields, api,_
 from odoo.exceptions import UserError
 import logging
 
@@ -27,6 +27,62 @@ class MrpBomLine(models.Model):
         ('buy', 'BUY'),
         ('make', 'MAKE')
     ], string='Selection', default='buy')
+
+    def write(self, vals):
+        """Relocated auto-approval logic for correct field visibility"""
+        _logger.info("AUTO-APPROVAL: write called for components %s with vals %s", self.ids, vals)
+        res = super().write(vals)
+        if 'approval_1' in vals or 'approval_2' in vals:
+
+            # Group unique branches from the updated components
+            branches = self.mapped('bom_line_branch_id')
+            _logger.info("AUTO-APPROVAL: branches to check: %s", branches.ids)
+            for branch in branches:
+                if not branch:
+                    _logger.info("AUTO-APPROVAL: No branch found for component")
+                    continue
+                # Check field visibility and values
+                selection = getattr(branch, 'buy_make_selection', 'FIELD_MISSING')
+                approved = getattr(branch, 'approve_to_manufacture', 'FIELD_MISSING')
+                _logger.info("AUTO-APPROVAL: Branch %s (ID %s): buy_make_selection=%s, approve_to_manufacture=%s", 
+                             branch.branch_name, branch.id, selection, approved)
+                
+                if selection == 'make' and not approved:
+                    # Check ALL components of THIS branch
+                    comp_states = [(c.id, c.approval_1, c.approval_2) for c in branch.mrp_bom_line_branch_component_ids]
+                    _logger.info("AUTO-APPROVAL: Branch %s components state: %s", branch.branch_name, comp_states)
+                    
+                    all_ready = all(c.approval_1 and c.approval_2 for c in branch.mrp_bom_line_branch_component_ids)
+                    if all_ready:
+                        _logger.info("AUTO-APPROVAL: Triggering for Branch %s (All components approved)", branch.branch_name)
+                        # Execute the toggle logic (which handles MO confirmation)
+                        result = branch.with_context(
+                            root_bom_id=branch.bom_id.id, 
+                            line=branch.bom_line_id.id
+                        ).action_toggle_approve_to_manufacture(True)
+                        
+                        # Add Bus Notification for Automated Approval
+                        try:
+                            # Use the message returned by the toggle method (contains MO name)
+                            message = result.get('message') if isinstance(result, dict) else ""
+                            if not message:
+                                message = _("Branch %s has been automatically approved for manufacture.") % branch.branch_name
+                                
+                            self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
+                                'title': _("Automated Manufacture Approval"),
+                                'message': message,
+                                'sticky': False,
+                                'type': 'success' if result.get('success', True) else 'warning',
+                            })
+                        except Exception as e:
+                            _logger.error("Failed to send auto-approval bus notification: %s", str(e))
+
+
+                    else:
+                        _logger.info("AUTO-APPROVAL: Not all components ready for branch %s", branch.branch_name)
+        return res
+
+
 
     def action_change_buy_make_selection(self, new_value):
         """

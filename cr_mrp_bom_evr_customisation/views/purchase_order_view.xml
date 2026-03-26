@@ -18,6 +18,15 @@
                 <field name="distribution_analytic_account_ids" widget="many2many_tags" groups="analytic.group_analytic_accounting" optional="show"/>
             </xpath>
 
+            <!-- Set manufacturer_id to readonly based on auto-selection condition -->
+            <xpath expr="//field[@name='order_line']/list//field[@name='manufacturer_id']" position="attributes">
+                <attribute name="readonly">is_manufacturer_readonly</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list//field[@name='manufacturer_id']" position="after">
+                <field name="is_manufacturer_readonly" column_invisible="1"/>
+            </xpath>
+
+
         </field>
     </record>
 </odoo>

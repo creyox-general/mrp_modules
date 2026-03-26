@@ -22,16 +22,22 @@
                 </t>
             </td>
 
-             <td t-if="props.showOptions.defaultCode" class="text-center">
-        <span t-if="data.default_code" t-esc="data.default_code"/>
-                 <span t-else="" class="text-muted"></span>
-    </td>
-             <td t-if="props.showOptions.oldEverestPn" class="text-center">
-        <span t-if="data.old_everest_pn" t-esc="data.old_everest_pn"/>
-                 <span t-else="" class="text-muted"></span>
-    </td>
+            <td t-if="props.showOptions.defaultCode" class="text-center">
+                <span t-if="data.default_code" 
+                      t-esc="data.default_code"
+                      t-on-click="onProductClick"
+                      class="text-primary"
+                      style="cursor: pointer;"/>
+                <span t-else="" class="text-muted"></span>
+            </td>
 
-             <td t-if="data.is_evr and props.showOptions.moInternalRef" class="text-center">
+
+            <td t-if="props.showOptions.oldEverestPn" class="text-center">
+                <span t-if="data.old_everest_pn" t-esc="data.old_everest_pn"/>
+                <span t-else="" class="text-muted"></span>
+            </td>
+
+            <td t-if="data.is_evr and props.showOptions.moInternalRef" class="text-center">
 
                     <select t-if="data.product_manufacturer_editable"
                             class="form-select form-select-sm"
@@ -46,7 +52,9 @@
                             </option>
                         </t>
                     </select>
-                 <span t-else="" class="text-muted"></span>
+                <span t-else="" 
+                      t-att-class="data.product_manufacturer_id ? '' : 'text-muted'"
+                      t-esc="data.product_manufacturer_ref || ''"/>
                 </td>
          </xpath>
 
@@ -59,7 +67,7 @@
                            t-model="data.approve_to_manufacture"
                            t-att-data-bom-line-id="data.bom_line_id"
                            t-on-change="onApproveToManufactureChange"/>
-                     <span t-elif="data.approve_to_manufacture and data.approve_to_manufacture_editable"
+                     <span t-elif="data.approve_to_manufacture"
                            class="badge badge-success bg-success text-white">✓</span>
                      <span t-else="" class="text-muted"></span>
                 </td>
@@ -67,7 +75,25 @@
 
 
         <xpath expr="//td[@t-if='showAvailabilities'][1]" position="before">
-            <td t-if="data.is_evr and props.showOptions.cfeQuantity" class="text-center cfe_data">
+<!--            <td t-if="data.is_evr and props.showOptions.cfeQuantity" class="text-center cfe_data">-->
+<!--                    <input t-if="data.cfe_editable"-->
+<!--                           type="text"-->
+<!--                           class="form-control form-control-sm cfe-quantity-input"-->
+<!--                           t-att-data-bom-line-id="data.bom_line_id"-->
+<!--                           t-model="data.cfe_quantity"-->
+<!--                           placeholder="CFE Qty"-->
+<!--                           style="width: 80px; margin: 0 auto;"-->
+<!--                           t-on-focus="onCfeFocus"-->
+<!--                           t-on-input="onCfeQuantityChange"/>-->
+<!--                <span t-elif="data.has_cfe_quantity"-->
+<!--                      class="badge badge-info bg-info text-white">-->
+<!--                        CFE: <t t-esc="data.cfe_quantity"/>-->
+<!--                    </span>-->
+<!--                <span t-else="" class="text-muted"></span>-->
+<!--            </td>-->
+
+
+                        <td t-if="data.is_evr and props.showOptions.cfeQuantity" class="text-center cfe_data">
                     <input t-if="data.cfe_editable"
                            type="text"
                            class="form-control form-control-sm cfe-quantity-input"
@@ -76,7 +102,7 @@
                            placeholder="CFE Qty"
                            style="width: 80px; margin: 0 auto;"
                            t-on-focus="onCfeFocus"
-                           t-on-input="onCfeQuantityChange"/>
+                           t-on-blur="onCfeQuantityChange"/>
                 <span t-elif="data.has_cfe_quantity"
                       class="badge badge-info bg-info text-white">
                         CFE: <t t-esc="data.cfe_quantity"/>

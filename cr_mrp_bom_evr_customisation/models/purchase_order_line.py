@@ -15,6 +15,32 @@ class PurchaseOrderLine(models.Model):
         string='Branch',
         help='The specific branch this PO line belongs to'
     )
+    is_manufacturer_readonly = fields.Boolean(
+        compute='_compute_is_manufacturer_readonly',
+        string='Manufacturer Readonly'
+    )
+
+    @api.depends('component_customer_po_id', 'component_vendor_po_id', 'order_id.partner_id')
+    def _compute_is_manufacturer_readonly(self):
+        """
+        Logic: Read-only if:
+        1. Linked to a BoM component.
+        2. Component has exactly 1 available manufacturer.
+        3. The PO partner matches that manufacturer's partner.
+        """
+        for line in self:
+            readonly = False
+            # Check both possible links (customer vs vendor PO flow)
+            comp = line.component_customer_po_id or line.component_vendor_po_id
+            if comp:
+                available = comp._get_available_manufacturers()
+                if len(available) == 1:
+                    manufacturer = available[0]
+                    # Check if PO vendor matches the ONLY available manufacturer's company
+                    if line.order_id.partner_id == manufacturer.manufacturer_id:
+                        readonly = True
+            line.is_manufacturer_readonly = readonly
+
     
     # In Odoo 18, distribution_analytic_account_ids is computed.
     # We add an inverse to allow direct assignment in our flow.

@@ -36,6 +36,7 @@ patch(BomOverviewLine.prototype, {
         this.cr_qty = this.data.quantity;
         this.canEditApproval2 = this.props.data.can_edit_approval_2 || false;
         this.actionService = useService("action");  // Add this line
+        this.lastSavedCfeValue = this.props.data.cfe_quantity || ''; // ADD THIS
 
     },
 
@@ -44,35 +45,61 @@ patch(BomOverviewLine.prototype, {
         this.previousCfeValue = event.target.value;
     },
 
-    async onCfeQuantityChange(event) {
-        const componentId = this.props.data.componentId || false;
-        const newValueStr = event.target.value;
-        const newValue = parseFloat(newValueStr || 0);
-        const crQty = parseFloat(this.cr_qty || 0);
+//    async onCfeQuantityChange(event) {
+//        const componentId = this.props.data.componentId || false;
+//        const newValueStr = event.target.value;
+//        const newValue = parseFloat(newValueStr || 0);
+//        const crQty = parseFloat(this.cr_qty || 0);
+//
+//        // ✅ Validation: CFE must be SMALLER than CR
+//        if (newValueStr && newValue > crQty) {
+//            this.env.services.notification.add(
+//                "CFE Quantity must be smaller than Quantity.",
+//                { type: "danger" }
+//            );
+//
+//            // Revert to previous value
+//            event.target.value = this.previousCfeValue || '';
+//            return;
+//        }
+//
+//        if (componentId) {
+//            await this.ormService.write("mrp.bom.line.branch.components", [componentId], {
+//                cfe_quantity: newValueStr, // It's a Char field in DB
+//                quantity: crQty,
+//            });
+//
+//            // Update UI instantly
+//            this.props.data.cfe_quantity = newValueStr;
+//            this.props.data.has_cfe_quantity = !!newValueStr;
+//        }
+//    },
 
-        // ✅ Validation: CFE must be SMALLER than CR
-        if (newValueStr && newValue > crQty) {
-            this.env.services.notification.add(
-                "CFE Quantity must be smaller than Quantity.",
-                { type: "danger" }
-            );
+async onCfeQuantityChange(event) {
+    const componentId = this.props.data.componentId || false;
+    const newValueStr = event.target.value;
+    const newValue = parseFloat(newValueStr || 0);
+    const crQty = parseFloat(this.cr_qty || 0);
 
-            // Revert to previous value
-            event.target.value = this.previousCfeValue || '';
-            return;
-        }
+    if (newValueStr && newValue > crQty) {
+        this.env.services.notification.add(
+            "CFE Quantity must be smaller than Quantity.",
+            { type: "danger" }
+        );
+        event.target.value = this.lastSavedCfeValue; // REVERT TO LAST SAVED
+        return;
+    }
 
-        if (componentId) {
-            await this.ormService.write("mrp.bom.line.branch.components", [componentId], {
-                cfe_quantity: newValueStr, // It's a Char field in DB
-                quantity: crQty,
-            });
-
-            // Update UI instantly
-            this.props.data.cfe_quantity = newValueStr;
-            this.props.data.has_cfe_quantity = !!newValueStr;
-        }
-    },
+    if (componentId) {
+        await this.ormService.write("mrp.bom.line.branch.components", [componentId], {
+            cfe_quantity: newValueStr,
+            quantity: crQty,
+        });
+        this.props.data.cfe_quantity = newValueStr;
+        this.props.data.has_cfe_quantity = !!newValueStr;
+        this.lastSavedCfeValue = newValueStr; // UPDATE LAST SAVED
+    }
+},
 
     onMoClick(moId) {
         if (!moId) return;
@@ -341,6 +368,12 @@ patch(BomOverviewLine.prototype, {
             views: [[false, 'form']],
             target: 'current',
         });
+    },
+
+    onProductClick() {
+        if (this.data.product_id) {
+            this.goToAction(this.data.product_id, 'product.product');
+        }
     }
 
 });

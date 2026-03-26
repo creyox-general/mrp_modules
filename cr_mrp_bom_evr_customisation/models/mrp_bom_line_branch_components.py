@@ -3,6 +3,10 @@
 from odoo import api, fields, models, _
 from odoo.addons import decimal_precision as dp
 from markupsafe import Markup
+import logging
+
+_logger = logging.getLogger(__name__)
+
 
 class MrpBomLineBranchComponents(models.Model):
     _name = "mrp.bom.line.branch.components"
@@ -89,6 +93,17 @@ class MrpBomLineBranchComponents(models.Model):
             if pmd:
                 line.product_manufacturer_id = pmd.id
 
+    def _get_available_manufacturers(self):
+        """Find manufacturer detail records linked to product's main vendor"""
+        self.ensure_one()
+        product = self.cr_bom_line_id.product_id
+        if not product:
+            return self.env['product.manufacturer.detail']
+        
+        # Consistent with report logic: find main vendor seller lines
+        main_vendor_sellers = product.product_tmpl_id.seller_ids.filtered(lambda s: s.main_vendor)
+        return main_vendor_sellers.mapped('manufacturer_ids')
+
 
     @api.depends(
         'cr_bom_line_id.product_id',
@@ -165,11 +180,21 @@ class MrpBomLineBranchComponents(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        """Override to prevent recursive branch assignment and enforce approval logic"""
+        """Override to prevent recursive branch assignment and enforce approval/manufacturer logic"""
         for vals in vals_list:
             if vals.get('approval_2'):
                 vals['approval_1'] = True
-        return super(MrpBomLineBranchComponents, self.with_context(skip_branch_recompute=True)).create(vals_list)
+        
+        records = super(MrpBomLineBranchComponents, self.with_context(skip_branch_recompute=True)).create(vals_list)
+        
+        # Auto-select manufacturer if only one choice exists
+        for rec in records:
+            if not rec.product_manufacturer_id:
+                available = rec._get_available_manufacturers()
+                if len(available) == 1:
+                    rec.product_manufacturer_id = available[0].id
+                    
+        return records
 
     @api.constrains('approval_1', 'approval_2')
     def _check_approvals_main_vendor(self):
@@ -179,68 +204,148 @@ class MrpBomLineBranchComponents(models.Model):
 
     def write(self, vals):
         """Override to prevent recursive branch assignment and enforce approval logic"""
+        # Capture old approval states to detect precisely what changed
+        old_approvals = {line.id: (line.approval_1, line.approval_2) for line in self}
+
         if vals.get('approval_2'):
             vals['approval_1'] = True
             
         # Call super first to apply changes to the record
         res = super(MrpBomLineBranchComponents, self.with_context(skip_branch_recompute=True)).write(vals)
 
-        # Refined Approval Revocation Logic
-        # Trigger only if both approvals are now False AND at least one was just changed
+        # Auto-select manufacturer if empty and exactly one choice exists
+        for rec in self:
+            if not rec.product_manufacturer_id:
+                available = rec._get_available_manufacturers()
+                if len(available) == 1:
+                    rec.product_manufacturer_id = available[0].id
+
+        # Refined Approval Logic (Notifications + Revocation)
         if 'approval_1' in vals or 'approval_2' in vals:
             for line in self:
-                if not line.approval_1 and not line.approval_2:
+                old_app1, old_app2 = old_approvals.get(line.id, (False, False))
+                
+                # Detect change direction
+                is_unapproving = (old_app2 and not line.approval_2) or (old_app1 and not line.approval_1 and not line.approval_2)
+                is_approving = (not old_app1 and line.approval_1) or (not old_app2 and line.approval_2)
+
+                # 1. Bus Notification for ALL changes (To current user for immediate feedback)
+                if is_approving or is_unapproving:
+                    _logger.info("Sending Bus Notification for approval change on Component %s", line.id)
+                    try:
+                        self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
+                            'title': _("BOM Approval Updated"),
+                            'message': _("Approval %s for %s") % (
+                                _("granted") if is_approving else _("removed"),
+                                line.cr_bom_line_id.display_name
+                            ),
+                            'sticky': False,
+                            'type': 'success' if is_approving else 'warning',
+                        })
+                    except Exception as e:
+                        _logger.error("Failed to send bus notification: %s", str(e))
+
+                # 2. Revocation logic (Cleanup and Alerts)
+                if is_unapproving:
+                    _logger.info(
+                        "Approval Revocation detected for Component %s (Line: %s). "
+                        "Previous: (App1=%s, App2=%s), New: (App1=%s, App2=%s).",
+                        line.id, line.cr_bom_line_id.display_name, 
+                        old_app1, old_app2, line.approval_1, line.approval_2
+                    )
+                    
                     # Find linked PO lines BEFORE any deletion
                     linked_po_lines = line.customer_po_ids | line.vendor_po_ids
                     if not linked_po_lines:
+                        _logger.debug("No linked PO lines found for component %s, skipping cleanup.", line.id)
                         continue
                     
                     draft_lines = linked_po_lines.filtered(lambda l: l.order_id.state in ['draft', 'sent', 'to approve'])
                     confirmed_lines = linked_po_lines.filtered(lambda l: l.order_id.state not in ['draft', 'sent', 'cancel', 'to approve'])
 
-                    # 1. Notify for confirmed lines FIRST (while records exist)
+                    # A. Alerts for Confirmed Lines (Only if Done state for Chatter)
                     if confirmed_lines:
+                        notified_orders = self.env['purchase.order']
                         for po_line in confirmed_lines:
-                            buyer = po_line.order_id.user_id
-                            if not buyer:
+                            order = po_line.order_id
+                            if order in notified_orders:
                                 continue
                             
-                            # HTML mention for high visibility in chatter
-                            mention = Markup('<a href="#" data-oe-model="res.partner" data-oe-id="%s">@%s</a> ') % (buyer.partner_id.id, buyer.partner_id.name)
-                            body = mention + _("ATTENTION: Approval for component %s has been REMOVED in the BOM Overview for PO %s. Please review and remove this line if no longer needed.") % (po_line.product_id.display_name, po_line.order_id.name)
-                            
-                            # Post to Chatter (as requested by client)
-                            po_line.order_id.message_post(
-                                body=body,
-                                partner_ids=buyer.partner_id.ids,
-                                message_type='comment',
-                                subtype_xmlid='mail.mt_comment'
-                            )
+                            buyer = order.user_id
+                            if not buyer:
+                                _logger.warning("PO %s has no user_id, skipping detailed alerts.", order.name)
+                                continue
 
-                            # Previous direct notification logic (commented out per client request)
-                            """
-                            title = _("BOM Approval Removed")
-                            # A. Real-time Toast
-                            self.env['bus.bus']._sendone(buyer.partner_id, 'simple_notification', {
-                                'title': title,
-                                'message': body,
-                                'sticky': True,
-                                'type': 'warning',
-                            })
+                            _logger.info("Processing alerts for confirmed PO %s (state=%s)", order.name, order.state)
                             
-                            # B. Direct Odoo Notification
-                            po_line.order_id.message_notify(
-                                partner_ids=buyer.partner_id.ids,
-                                body=body,
-                                subject=title,
-                            )
-                            """
-                    
-                    # 2. Delete draft PO lines AFTER notification
+                            # Mention formatting
+                            mention = Markup('<a href="#" data-oe-model="res.partner" data-oe-id="%s">@%s</a> ') % (buyer.partner_id.id, buyer.partner_id.name)
+                            body = _("<strong>BOM APPROVAL REMOVED</strong><br/>") + mention + _("ATTENTION: Approval for component %s has been REMOVED in the BOM Overview for PO %s. Please review and remove this line if no longer needed.") % (po_line.product_id.display_name, order.name)
+                            
+                            # Chatter msg ONLY if in 'done' state
+                            if order.state == 'done':
+                                _logger.info("Posting to Chatter and notifying via Inbox for PO %s (state=done)", order.name)
+                                order.message_post(
+                                    body=body,
+                                    partner_ids=buyer.partner_id.ids,
+                                    message_type='comment',
+                                    subtype_xmlid='mail.mt_comment'
+                                )
+                                # Direct Inbox notification
+                                order.message_notify(
+                                    partner_ids=buyer.partner_id.ids,
+                                    body=body,
+                                    subject=_("BOM Approval Removed"),
+                                )
+                            else:
+                                _logger.info("Skipping Chatter/Inbox for PO %s (state=%s != done)", order.name, order.state)
+
+                            notified_orders |= order
+
+                    # B. Delete draft PO lines and cleanup empty POs
                     if draft_lines:
+                        _logger.info("Deleting %d draft PO lines.", len(draft_lines))
+                        # Identify orders before we unlink lines
+                        order_map = {order.id: order.name for order in draft_lines.mapped('order_id')}
                         draft_lines.unlink()
+                        
+                        for order_id, order_name in order_map.items():
+                            order = self.env['purchase.order'].browse(order_id)
+                            if not order.exists():
+                                continue
+                                
+                            if not order.order_line:
+                                _logger.info("PO %s has no lines remaining after revocation. Cancelling and deleting PO record.", order_name)
+                                try:
+                                    # Odoo requires PO to be in 'cancel' state before deletion
+                                    order.button_cancel()
+                                    order.unlink()
+                                    
+                                    # Notify only about PO deletion (exclusive)
+                                    self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
+                                        'title': _("Purchase Order Deleted"),
+                                        'message': _("PO %s was automatically deleted because it has no lines remaining.") % order_name,
+                                        'sticky': True,
+                                        'type': 'danger',
+                                    })
+                                except Exception as e:
+                                    _logger.warning("Could not cancel/delete empty PO %s: %s", order_name, str(e))
+                            else:
+                                # PO still has other lines, notify only about the line removal
+                                self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
+                                    'title': _("PO Line Deleted"),
+                                    'message': _("A line on PO %s was removed due to approval revocation.") % order_name,
+                                    'sticky': False,
+                                    'type': 'warning',
+                                })
+
+
+
 
         return res
+
+
+
 
     def unlink(self):
         """Override to prevent recursive branch assignment"""

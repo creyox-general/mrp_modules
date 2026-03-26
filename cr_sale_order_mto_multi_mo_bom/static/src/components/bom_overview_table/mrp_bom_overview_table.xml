@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="mrp.BomOverviewTable" t-inherit-mode="extension">
+        <!-- Redefining the entire header row to achieve perfect centering -->
+        <xpath expr="//div[hasclass('mb-5')]" position="replace">
+            <div class="d-flex mb-5 align-items-center w-100 py-3 border-bottom px-2">
+                <!-- 1. LEFT: Product Info and Buttons -->
+                <div class="d-flex align-items-center me-auto" style="flex: 1 1 0;">
+                    <div class="">
+                        <h2><a href="#" t-on-click.prevent="goToProduct" t-esc="data.name"/></h2>
+                        <hr t-if="data.bom_code"/>
+                        <h6 t-if="data.bom_code" class="mb-0">Ref: <t t-esc="data.bom_code"/></h6>
+                    </div>
+                    <!-- Smart Buttons (Square) -->
+                    <div class="d-flex gap-1 align-items-center ms-4 ps-4 border-start h-100">
+                        <button t-if="data.so_count" 
+                                class="btn btn-outline-primary btn-sm text-nowrap" 
+                                t-on-click="() => this.openRecords('sale.order', data.so_ids, 'Sales')">
+                            <i class="fa fa-dollar me-1"/>Sales (<t t-esc="data.so_count"/>)
+                        </button>
+                        <button t-if="data.po_count" 
+                                class="btn btn-outline-primary btn-sm text-nowrap" 
+                                t-on-click="() => this.openRecords('purchase.order', data.po_ids, 'Purchase')">
+                            <i class="fa fa-shopping-cart me-1"/>Purchase (<t t-esc="data.po_count"/>)
+                        </button>
+                        <button t-if="data.mo_count" 
+                                class="btn btn-outline-primary btn-sm text-nowrap" 
+                                t-on-click="() => this.openRecords('mrp.production', data.mo_ids, 'Manufacturing')">
+                            <i class="fa fa-wrench me-1"/>Manufacturing (<t t-esc="data.mo_count"/>)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. MIDDLE: Project and Customer Info (Centered) -->
+                <div class="d-flex flex-column align-items-center text-center mx-auto px-4 border-start border-end" style="flex: 0 0 auto; min-width: 300px;">
+                    <div t-if="data.project_name" class="h4 mb-1">
+                        <strong>Project: </strong>
+                        <a href="#" t-on-click.prevent="() => this.openRecords('project.project', [data.project_id], 'Project')" t-esc="data.project_name"/>
+                    </div>
+                    <div t-if="data.customer_name" class="h6 text-muted mb-0">
+                        <strong>Customer: </strong><t t-esc="data.customer_name"/>
+                    </div>
+                </div>
+
+
+                <!-- 3. RIGHT: Stock Availability (Re-include from base) -->
+                <div class="d-flex align-items-center ms-auto" style="flex: 1 1 0; justify-content: flex-end;">
+                    <div class="text-center px-4">
+                        <h3><t t-esc="formatFloat(data.quantity_available, {'digits': [false, precision]})"/> <t t-if="showUom" t-esc="props.uomName"/></h3>
+                        <span>Free to Use</span>
+                    </div>
+                    <div t-if="data.hasOwnProperty('earliest_capacity')" class="ps-4 text-center border-start">
+                        <h3><t t-esc="formatFloat(data.earliest_capacity)"/> <t t-if="showUom" t-esc="props.uomName"/></h3>
+                        <span t-esc="data.earliest_date"/>
+                    </div>
+                    <div t-if="data.hasOwnProperty('leftover_capacity')" class="ps-4 text-center border-start">
+                        <h3><t t-esc="formatFloat(data.leftover_capacity)"/> <t t-if="showUom" t-esc="props.uomName"/></h3>
+                        <span t-esc="data.leftover_date"/>
+                    </div>
+                </div>
+            </div>
+        </xpath>
+
+
+
+
+    </t>
+</templates>

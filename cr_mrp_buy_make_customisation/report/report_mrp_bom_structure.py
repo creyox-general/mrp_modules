@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # Part of Creyox Technologies.
+import logging
 from odoo import models, api
+ 
+_logger = logging.getLogger(__name__)
 
 
 class ReportBomStructureBranch(models.AbstractModel):
@@ -151,9 +154,24 @@ class ReportBomStructureBranch(models.AbstractModel):
                             })
 
                     data['available_manufacturers'] = available_manufacturers
-                    data[
-                        'product_manufacturer_id'] = component_rec.product_manufacturer_id.id if component_rec.product_manufacturer_id else False
+                    data['product_manufacturer_id'] = component_rec.product_manufacturer_id.id if component_rec.product_manufacturer_id else False
+                    data['product_manufacturer_ref'] = component_rec.product_manufacturer_id.manufacture_internal_ref if component_rec.product_manufacturer_id else ""
+                    
+                    # Check for "no data available" case
+                    if not available_manufacturers:
+                        data['product_manufacturer_ref'] = "No data available for manufacturer"
+
+                    # Fallback auto-assign for display
+                    if not data['product_manufacturer_id'] and len(available_manufacturers) == 1:
+                        mfr_data = available_manufacturers[0]
+                        data['product_manufacturer_id'] = mfr_data['id']
+                        data['product_manufacturer_ref'] = mfr_data['ref']
+                        component_rec.write({'product_manufacturer_id': mfr_data['id']})
+
                     data['product_manufacturer_editable'] = True
+
+                    _logger.info("BOM STRUCTURE DEBUG (Buy/Make - V1): Comp %s, Mfr ID: %s, Mfr Ref: %s", 
+                                 component_rec.id, data['product_manufacturer_id'], data['product_manufacturer_ref'])
 
                     # Customer ref
                     data['customer_ref'] = bom_line.customer_ref or ''
@@ -223,10 +241,26 @@ class ReportBomStructureBranch(models.AbstractModel):
                     # Selected manufacturer
                     if component_rec.product_manufacturer_id:
                         data['product_manufacturer_id'] = component_rec.product_manufacturer_id.id
+                        data['product_manufacturer_ref'] = component_rec.product_manufacturer_id.manufacture_internal_ref
                     else:
                         data['product_manufacturer_id'] = False
+                        data['product_manufacturer_ref'] = ""
+                        
+                    # Check for "no data available" case
+                    if not available_manufacturers:
+                        data['product_manufacturer_ref'] = "No data available for manufacturer"
+
+                    # Fallback auto-assign for display
+                    if not data['product_manufacturer_id'] and len(available_manufacturers) == 1:
+                        mfr_data = available_manufacturers[0]
+                        data['product_manufacturer_id'] = mfr_data['id']
+                        data['product_manufacturer_ref'] = mfr_data['ref']
+                        component_rec.write({'product_manufacturer_id': mfr_data['id']})
 
                     data['product_manufacturer_editable'] = True
+
+                    _logger.info("BOM STRUCTURE DEBUG (Buy/Make - V2): Comp %s, Mfr ID: %s, Mfr Ref: %s", 
+                                 component_rec.id, data['product_manufacturer_id'], data['product_manufacturer_ref'])
 
 
                 else:

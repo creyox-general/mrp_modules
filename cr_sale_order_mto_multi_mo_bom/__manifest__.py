@@ -2,7 +2,7 @@
 # Part of Creyox Technologies
 {
     'name': 'Sale Order MTO Multi MO BOM',
-    'version': '18.0.0.14',
+    'version': '18.0.0.15',
     'category': 'Sales',
     'summary': 'Create hierarchical BOMs on SO confirmation for RE orders',
     "author": "Creyox Technologies",
